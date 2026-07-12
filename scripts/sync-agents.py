@@ -12,8 +12,8 @@ USAGE
     python sync-agents.py --init             # generate a default sync.yaml
 
 WHAT IT COPIES
-    For each target, copies a configured set of files from this
-    savant-protocol/ source to the target's destination.
+    For each target, copies a configured set of files from this Savant
+    project's source to the target's destination.
 
     Targets with mode "copy"  -> source file copied as-is to dest
     Targets with mode "strip" -> source file copied with the trailing
@@ -236,7 +236,7 @@ def load_sync_file(path: Path) -> list:
 
 def write_default_sync_file(path: Path) -> None:
     """Generate a default sync.yaml the user can edit."""
-    content = """# savant-protocol sync targets
+    content = """# Savant project sync targets
 # Edit paths/files, then run: python sync-agents.py --apply
 
 target:

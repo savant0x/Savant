@@ -30,6 +30,45 @@ and gets tagged on the next release. Cross-ref:
 
 ---
 
+## [Unreleased]
+
+Work-in-progress since v0.0.2. Tagged `## v0.0.3 — YYYY-MM-DD` at the
+next release cut per release-only-versioning discipline. Captures the
+in-repo `fame0528`/`savant-protocol` cleanup performed on 2026-07-12.
+
+### Fixed
+
+- **HTTP-Referer header bug** [src-tauri/src/inference/openrouter.rs:79]:
+  the `HTTP-Referer` was hardcoded to `https://github.com/fame0528/Savant`
+  (boilerplate-era leftover from when the project booted off the
+  savant-protocol upstream). Should point at the actual project repo
+  `https://github.com/savant0x/Savant` per OpenRouter's API guidance
+  ("HTTP-Referer should identify the calling application"). The fix is
+  correctness + brand identity, not a security boundary.
+
+### Changed
+
+- **Boilerplate reference cleanup:** 4 in-repo source-file `fame0528` /
+  `savant-protocol` references cleaned up:
+  - [`MIGRATION.md:11`] example `git clone` URL updated
+    `fame0528/savant-protocol` → `savant0x/Savant` (the project we
+    ship from today).
+  - [`scripts/release.py:211`] GitHub API `User-Agent` updated
+    `savant-protocol-release-script` → `savant-release-script` (script
+    identity accuracy).
+  - [`scripts/sync-agents.py:16-17`] docstring
+    `savant-protocol/ source` → `Savant project's source` (project
+    identity wording).
+  - [`scripts/sync-agents.py:239`] `sync.yaml` default header
+    `# savant-protocol sync targets` → `# Savant project sync targets`
+    (project identity wording).
+- `CHANGELOG.md:66` (v0.0.2 entry) and `scripts/release.py:33` (docstring
+  NOTE section) are **kept as historical documentation** of the
+  boilerplate→project separation discipline correction. Trimming would
+  lose the audit trail.
+
+---
+
 ## v0.0.2 — 2026-07-12
 
 Patch bump. FID-0003 (auto-derived session key) shipped end-to-end —

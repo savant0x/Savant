@@ -76,7 +76,7 @@ pub async fn chat_completion(prompt: &str) -> std::result::Result<String, Infere
     let response = client
         .post(OPENROUTER_CHAT_COMPLETIONS)
         .bearer_auth(&api_key)
-        .header("HTTP-Referer", "https://github.com/fame0528/Savant")
+        .header("HTTP-Referer", "https://github.com/savant0x/Savant")
         .header("X-Title", "Savant Core Phase 1")
         .json(&request)
         .send()

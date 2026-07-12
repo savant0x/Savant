@@ -8,7 +8,7 @@ Retrofit the ECHO Protocol into an existing project.
 
 ```bash
 # From your project root
-git clone https://github.com/fame0528/savant-protocol.git /tmp/echo-protocol
+git clone https://github.com/savant0x/Savant.git /tmp/echo-protocol
 cp -r /tmp/echo-protocol/ECHO.md .
 cp -r /tmp/echo-protocol/protocol.config.yaml .
 cp -r /tmp/echo-protocol/STARTER-PROMPT.md .

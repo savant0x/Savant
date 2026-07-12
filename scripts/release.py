@@ -208,7 +208,7 @@ def api_request(method: str, path: str, token: str, body: dict | None = None) ->
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "savant-protocol-release-script",
+            "User-Agent": "savant-release-script",
         },
     )
     try:
