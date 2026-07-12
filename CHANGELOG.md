@@ -41,6 +41,12 @@ Work-in-progress since v0.0.2. Captures the in-repo
 and the subsequent quality fixes (FID-006 v3, FID-007, FID-008,
 FID-009) on 2026-07-13.
 
+**TLDR:** Soul Builder feature (FID-006 v3) with LLM-driven
+generation + SSE streaming (FID-010), 3-way swarm diff preview
+before deploy (FID-013), 43-issue Perfection Loop (logger +
+redact() + 17 tests), env key security fix (dev guard prevents
+leak in Tauri bundle), dev server error fixes.
+
 ### Fixed (FID-009 — Manifest page quality fix, 2026-07-13)
 
 - **DEPTH locked at 50%** [`src/lib/manifest-mock.ts:381`]: removed the
