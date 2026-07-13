@@ -43,6 +43,15 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# Phase 5 — DPAPI at-rest vault encryption (Windows).
+# On Windows: encrypts the entire vault blob with CryptProtectData (user scope).
+# On Unix: passthrough no-op (relies on 0o600 file perms); libsecret parity is a future FID.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+] }
+
 # FID-017 — Inner monologue wiring (savant_agent)
 savant_agent = { workspace = true }
 savant_core = { workspace = true }

@@ -8,16 +8,27 @@
 //!   1. `SAVANT_<PROVIDER>_API_KEY` env var
 //!   2. cwd `.env` (developer convenience)
 //!   3. exe-dir `.env` (packaged app)
-//!   4. JSON vault file at OS app-data dir
-//!      (Windows: `%APPDATA%/savant/auth.json` / Unix: `~/.config/savant/auth.json`)
+//!   4. Encrypted vault file at OS app-data dir
+//!      (Windows: `%APPDATA%/savant/auth.json` [DPAPI-encrypted] / Unix: `~/.config/savant/auth.json` [plain JSON, 0o600])
 //!   5. UI prompt (`MasterKeySetup.tsx`) → persist to vault file
 //!
-//! Unix perms enforced 0o600. Windows default ACL for Phase 1; DPAPI integration
-//! deferred to Phase 5 per the FID.
+//! Unix perms enforced 0o600. Windows: **Phase 5** — vault is DPAPI-encrypted at rest
+//! (user scope, `CRYPTPROTECT_LOCAL_MACHINE` flag = 0). The encrypted blob binds to
+//! the current Windows user SID; if `auth.json` is copied to another machine or
+//! another user, it cannot be decrypted. Trade-off: a system-level password reset
+//! (admin force-reset without old password) can invalidate the DPAPI master key,
+//! requiring a fresh `setup_master_key` re-vault. Standard user password CHANGES
+//! do NOT invalidate DPAPI (Windows auto-rewraps the master key on logon).
+//!
+//! File format versioning:
+//!   - v1: plain JSON `{ "version": 1, "profiles": {...}, "agent_identity": {...} }`
+//!   - v2: `SAVANT_VAULT_V2\n` magic header (16 bytes) + DPAPI-encrypted JSON blob
+//!   On `load_vault()`, v1 files are detected via the absence of the magic header
+//!   and lazily migrated to v2 (immediate re-write on first load after upgrade).
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
@@ -37,6 +48,12 @@ pub enum VaultError {
     PathError,
     #[error("Profile '{0}' not found in vault")]
     ProfileNotFound(String),
+    #[error("Vault encryption failed: {0}")]
+    EncryptionFailed(String),
+    #[error("Vault decryption failed: {0}")]
+    DecryptionFailed(String),
+    #[error("Vault file is corrupted (unexpected magic header or unreadable payload)")]
+    CorruptedVault,
 }
 
 pub type Result<T> = std::result::Result<T, VaultError>;
@@ -171,49 +188,282 @@ pub fn vault_file_path() -> Result<PathBuf> {
     }
 }
 
-fn read_vault_file(path: &PathBuf) -> Result<Vault> {
-    let json = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&json)?)
+// ---------------------------------------------------------------------------
+// File format versioning
+// ---------------------------------------------------------------------------
+
+/// Magic header for the Phase 5 encrypted vault format (v2).
+///
+/// 16 bytes including the trailing newline: `SAVANT_VAULT_V2\n`.
+/// On disk: `<16-byte header><DPAPI-encrypted JSON bytes>`.
+pub const MAGIC_HEADER: &[u8; 16] = b"SAVANT_VAULT_V2\n";
+
+/// True if the file at `path` looks like the legacy v1 plain-JSON format.
+///
+/// Detection rule: read the first byte. Plain JSON starts with `{`; v2 starts with `S`
+/// (the first byte of `SAVANT_VAULT_V2`). Empty files are treated as v1 (will parse as
+/// JSON error, surfacing the corruption to the caller).
+fn is_v1_format(path: &Path) -> Result<bool> {
+    let bytes = fs::read(path)?;
+    Ok(bytes.first().copied() == Some(b'{'))
 }
 
-fn write_vault_file(vault: &Vault, path: &PathBuf) -> Result<()> {
+/// Compute the temp-file path for the atomic write: same parent dir, basename
+/// with a `.tmp` suffix appended. Co-locating the temp with the destination
+/// guarantees the rename stays on a single filesystem (required for atomicity
+/// on Unix; `MoveFileExW + MOVEFILE_REPLACE_EXISTING` on Windows is already
+/// atomic regardless of volume).
+pub fn tmp_path_for(path: &Path) -> PathBuf {
+    let mut tmp_os = path.as_os_str().to_owned();
+    tmp_os.push(".tmp");
+    PathBuf::from(tmp_os)
+}
+
+// ---------------------------------------------------------------------------
+// Platform-conditional at-rest protection (DPAPI on Windows, passthrough on Unix)
+// ---------------------------------------------------------------------------
+
+/// Dispatcher: protect plaintext bytes. Windows uses DPAPI; Unix is a passthrough
+/// (the file's 0o600 perms are the only at-rest protection; libsecret parity is a future FID).
+fn platform_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
+    #[cfg(target_os = "windows")]
+    {
+        dpapi_protect(plaintext)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Unix passthrough: encryption is deferred to libsecret in a future FID.
+        // For now, the magic header is still prepended by `write_vault_file`, so the
+        // file format is consistent across platforms even though the "encrypted"
+        // bytes on Unix are the same as the plaintext.
+        Ok(plaintext.to_vec())
+    }
+}
+
+/// Dispatcher: unprotect vault blob bytes. Windows uses DPAPI; Unix is a passthrough.
+fn platform_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
+    #[cfg(target_os = "windows")]
+    {
+        dpapi_unprotect(blob)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(blob.to_vec())
+    }
+}
+
+/// Windows DPAPI protect (user scope, `CRYPTPROTECT_LOCAL_MACHINE` flag = 0).
+///
+/// The encrypted blob is bound to the current Windows user SID. It can only be
+/// decrypted by the same user on the same machine. Standard password changes do
+/// not invalidate DPAPI (Windows re-wraps the master key on logon); a system-level
+/// password reset (admin force-reset without old password) can.
+#[cfg(target_os = "windows")]
+fn dpapi_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
+    use std::ffi::c_void;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: plaintext.len() as u32,
+        pbData: plaintext.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    unsafe {
+        CryptProtectData(
+            &mut input,
+            PCWSTR::null(),
+            None,                       // poptionalentropy: Option<*const CRYPT_INTEGER_BLOB>
+            None,                       // pvreserved: Option<*const c_void>
+            Some(std::ptr::null()),     // ppromptstruct: Option<*const CRYPT_PROMPTSTRUCT> (no UI prompt)
+            0,                          // dwflags: user scope (no CRYPTPROTECT_LOCAL_MACHINE)
+            &mut output,
+        )
+        .map_err(|e| {
+            VaultError::EncryptionFailed(format!("CryptProtectData: {}", e.message()))
+        })?;
+    }
+
+    let protected = unsafe {
+        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
+    };
+
+    // DPAPI allocates `output.pbData` on the local heap; we MUST LocalFree it
+    // after copying the bytes into a Rust Vec. Ignoring the return value is safe:
+    // LocalFree returns NULL on success and the original handle on failure (which
+    // we can't do anything about at this point).
+    unsafe {
+        let _ = LocalFree(HLOCAL(output.pbData as *mut c_void));
+    }
+
+    Ok(protected)
+}
+
+/// Windows DPAPI unprotect. Inverse of `dpapi_protect`.
+#[cfg(target_os = "windows")]
+fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
+    use std::ffi::c_void;
+    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: blob.len() as u32,
+        pbData: blob.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    unsafe {
+        CryptUnprotectData(
+            &mut input,
+            Some(std::ptr::null_mut()),   // ppszdatadescr: Option<*mut PWSTR> (description output, not needed)
+            None,                          // poptionalentropy: Option<*const CRYPT_INTEGER_BLOB>
+            None,                          // pvreserved: Option<*const c_void>
+            Some(std::ptr::null()),        // ppromptstruct: Option<*const CRYPT_PROMPTSTRUCT>
+            0,
+            &mut output,
+        )
+        .map_err(|e| {
+            VaultError::DecryptionFailed(format!("CryptUnprotectData: {}", e.message()))
+        })?;
+    }
+
+    let plaintext = unsafe {
+        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
+    };
+
+    unsafe {
+        let _ = LocalFree(HLOCAL(output.pbData as *mut c_void));
+    }
+
+    Ok(plaintext)
+}
+
+// ---------------------------------------------------------------------------
+// File I/O — v1 (plain JSON) and v2 (magic header + DPAPI) are both supported.
+// `write_vault_file` always writes v2. `read_vault_file` auto-detects v1 vs v2.
+// `load_vault` triggers a lazy v1→v2 migration on first read after upgrade.
+// ---------------------------------------------------------------------------
+
+fn read_vault_file(path: &Path) -> Result<Vault> {
+    let bytes = fs::read(path)?;
+
+    if bytes.len() >= MAGIC_HEADER.len() && &bytes[..MAGIC_HEADER.len()] == MAGIC_HEADER {
+        // v2: magic header + DPAPI-encrypted JSON
+        let protected = &bytes[MAGIC_HEADER.len()..];
+        if protected.is_empty() {
+            return Err(VaultError::CorruptedVault);
+        }
+        let plaintext = platform_unprotect(protected)?;
+        let vault: Vault = serde_json::from_slice(&plaintext)?;
+        Ok(vault)
+    } else {
+        // v1: legacy plain JSON. No magic header detected.
+        let vault: Vault = serde_json::from_slice(&bytes)?;
+        Ok(vault)
+    }
+}
+
+fn write_vault_file(vault: &Vault, path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(vault)?;
+    let protected = platform_protect(json.as_bytes())?;
 
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)?;
-        f.write_all(json.as_bytes())?;
-        f.sync_all()?;
+    let mut payload = Vec::with_capacity(MAGIC_HEADER.len() + protected.len());
+    payload.extend_from_slice(MAGIC_HEADER);
+    payload.extend_from_slice(&protected);
+
+    // Atomic write protocol:
+    //   1. Serialize the full payload to `<path>.tmp` in the same directory.
+    //   2. `fsync` the tempfile so the bytes survive a power loss.
+    //   3. `fs::rename(tmp, path)` — atomic on both Windows (MoveFileExW with
+    //      MOVEFILE_REPLACE_EXISTING) and Unix (rename(2) within one filesystem).
+    //   4. On any failure mid-write, best-effort remove the partial `.tmp` so it
+    //      does not accumulate across save attempts.
+    //
+    // Threat model: protects against a failed write (disk full, perms, ENOSPC,
+    // process killed mid-write) corrupting the on-disk vault. A partial write
+    // to the temp file leaves the original vault untouched; the rename is the
+    // only step that mutates the canonical path.
+    let tmp_path = tmp_path_for(path);
+
+    let write_result: Result<()> = (|| {
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create(true) // create if absent
+                .truncate(true) // truncate if a prior partial write left a stale .tmp
+                .mode(0o600) // owner read+write only, applied at file creation
+                .open(&tmp_path)?;
+            f.write_all(&payload)?;
+            f.sync_all()?;
+        }
+
+        #[cfg(not(unix))]
+        {
+            use std::io::Write;
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&tmp_path)?;
+            f.write_all(&payload)?;
+            f.sync_all()?;
+        }
+        Ok(())
+    })();
+
+    if let Err(e) = write_result {
+        // Best-effort cleanup; ignore cleanup errors (the original `e` is more
+        // informative than any remove_file error).
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
     }
 
-    #[cfg(not(unix))]
-    {
-        // Windows: default ACL for Phase 1. DPAPI integration is Phase 5.
-        fs::write(path, json)?;
+    // The atomic swap. On Windows, `fs::rename` uses MoveFileExW with
+    // MOVEFILE_REPLACE_EXISTING, which atomically replaces the destination.
+    if let Err(e) = fs::rename(&tmp_path, path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(VaultError::Io(e));
     }
 
     Ok(())
 }
 
-/// Load the vault from disk, or return `Vault::default()` (Strategy 5 placeholder).
+/// Load the vault from disk. Triggers a lazy v1→v2 migration on first read
+/// after upgrade (re-writes the file with DPAPI protection immediately).
 pub async fn load_vault() -> Result<Vault> {
-    if let Some(path) = vault_file_path().ok() {
-        if path.exists() {
-            return read_vault_file(&path);
-        }
+    let path = match vault_file_path() {
+        Ok(p) => p,
+        Err(_) => return Ok(Vault::default()), // Strategy 5 placeholder: empty vault, UI prompts to populate.
+    };
+    if !path.exists() {
+        return Ok(Vault::default());
     }
-    // Strategy 5 placeholder: empty vault, UI prompts to populate.
-    Ok(Vault::default())
+
+    // Detect v1 BEFORE reading (so we can trigger migration after a successful read).
+    let needs_migration = is_v1_format(&path)?;
+    let vault = read_vault_file(&path)?;
+
+    if needs_migration {
+        // Lazily upgrade the on-disk format to v2 (DPAPI-encrypted). Idempotent:
+        // subsequent calls will detect v2 via the magic header and skip this branch.
+        write_vault_file(&vault, &path)?;
+    }
+
+    Ok(vault)
 }
 
 /// Resolve a secret-referenced-environment-variable (e.g. `env:OPENROUTER_API_KEY`).
@@ -286,6 +536,32 @@ pub async fn list_profiles() -> Result<Vec<ProfileSummary>> {
             updated_at: p.updated_at,
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Public test helpers — explicit-path variants of `load_vault` / `write_vault_file`.
+// These let integration tests exercise the v1→v2 migration + DPAPI roundtrip
+// against tempfiles without touching the user's real OS vault.
+// ---------------------------------------------------------------------------
+
+/// Load a vault from an explicit file path. Triggers the same v1→v2 lazy migration
+/// as `load_vault()`. Used by integration tests with `tempfile::tempdir()`.
+pub async fn load_vault_from_path(path: &Path) -> Result<Vault> {
+    if !path.exists() {
+        return Ok(Vault::default());
+    }
+    let needs_migration = is_v1_format(path)?;
+    let vault = read_vault_file(path)?;
+    if needs_migration {
+        write_vault_file(&vault, path)?;
+    }
+    Ok(vault)
+}
+
+/// Write a vault to an explicit file path (always in v2/DPAPI format).
+/// Used by integration tests to seed a v1 file before exercising the migration.
+pub async fn write_vault_to_path(vault: &Vault, path: &Path) -> Result<()> {
+    write_vault_file(vault, path)
 }
 
 #[cfg(test)]
