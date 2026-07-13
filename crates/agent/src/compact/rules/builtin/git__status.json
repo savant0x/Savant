@@ -1,0 +1,43 @@
+{
+    "id": "git/status",
+    "family": "VersionControl",
+    "description": "Compress git status output. Clean tree -> short summary. Modified -> file list only.",
+    "match_criteria": {
+        "tool_names": ["git"],
+        "argv_includes": ["status"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^On branch ",
+            "^Your branch is ",
+            "^nothing to commit",
+            "^no changes added"
+        ],
+        "keep_patterns": [
+            "^(M|A|D|\\?\\?|R|C|U) ",
+            "^Changes not staged",
+            "^Changes to be committed",
+            "^Untracked files"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": false
+    },
+    "summarize": {
+        "head_lines": 20,
+        "tail_lines": 5,
+        "max_chars": 2000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text",
+    "counters": {
+        "modified": "^M ",
+        "added": "^A ",
+        "deleted": "^D ",
+        "untracked": "^\\?\\?"
+    }
+}

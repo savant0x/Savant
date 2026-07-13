@@ -1,0 +1,45 @@
+[package]
+name = "savant_skills"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+savant_core = { path = "../core" }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+bollard = "0.16"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+pulldown-cmark = "0.10"
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+walkdir = "2.4"
+uuid = { version = "1.22.0", features = ["v4"] }
+async-trait = "0.1"
+wassette = { git = "https://github.com/microsoft/wassette", rev = "dc7493965ab2aa9a671235b1b55b852c03702ffc" }
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3"
+reqwest = { workspace = true }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.3.0"
+caps = "0.5.5"
+libc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+
+[dev-dependencies]
+wat = "1"
+
+[lints]
+workspace = true

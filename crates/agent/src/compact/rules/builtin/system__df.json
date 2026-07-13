@@ -1,0 +1,31 @@
+{
+    "id": "system/df",
+    "family": "System",
+    "description": "Compress df output. Strip header, preserve filesystem usage percentages.",
+    "match_criteria": {
+        "tool_names": ["df"],
+        "argv0": ["df"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^Filesystem",
+            "^$",
+            "tmpfs",
+            "devtmpfs",
+            "udev"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 20,
+        "tail_lines": 5,
+        "max_chars": 2000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 2,
+    "output_hint": "text"
+}

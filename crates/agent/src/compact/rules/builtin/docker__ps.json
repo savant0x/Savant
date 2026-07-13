@@ -1,0 +1,30 @@
+{
+    "id": "docker/ps",
+    "family": "Infrastructure",
+    "description": "Compress docker ps output. Convert table to compact format, filter stopped containers.",
+    "match_criteria": {
+        "tool_names": ["docker"],
+        "argv_includes": ["ps"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^CONTAINER ID",
+            "^$",
+            ".*Exited.*",
+            ".*Created.*"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 20,
+        "tail_lines": 5,
+        "max_chars": 3000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text"
+}

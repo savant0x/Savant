@@ -54,6 +54,11 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+# Backup-of-env files (gap closed post-v0.0.4 prep — .env.bak had a real OPENROUTER_MASTER_KEY
+# that was caught by GitHub push-protection; this rule prevents recurrence).
+*.bak
+*.bak.*
+.env.bak
 
 # Database — Phase 2+ SQLite WAL artifacts
 *.db
@@ -66,6 +71,13 @@ build/
 logs/
 *.log
 *.tmp
+
+# Runtime data — badger-style agent memory DB + journal files (NOT source code)
+# Caught at git add -A time in v0.0.4 prep; staged 94 files / 132 MB of runtime
+# state at crates/agent/data/memory/ + crates/agent/agent/data/memory/.
+# Excluding here so a public release does not leak agent memory data.
+**/data/memory/
+**/*.jnl
 
 # Editor / OS / Dev environment
 .vscode/

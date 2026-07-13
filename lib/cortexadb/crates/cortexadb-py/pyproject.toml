@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.0"]
+build-backend = "maturin"
+
+[project]
+name = "cortexadb"
+version = "1.0.0"
+requires-python = ">=3.9"
+description = "Fast, embedded vector + graph memory for AI agents"
+authors = [
+    { name = "Anas Limem", email = "limemanas0@gmail.com" },
+]
+license = { text = "MIT OR Apache-2.0" }
+readme = "../../README.md"
+
+[project.optional-dependencies]
+docs = ["python-docx>=1.0"]
+pdf = ["pymupdf>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/anaslimem/CortexaDB"
+Repository = "https://github.com/anaslimem/CortexaDB"
+"Bug Tracker" = "https://github.com/anaslimem/CortexaDB/issues"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "cortexadb._cortexadb"

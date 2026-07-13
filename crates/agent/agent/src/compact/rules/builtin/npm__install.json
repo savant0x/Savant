@@ -1,0 +1,42 @@
+{
+    "id": "npm/install",
+    "family": "PackageManager",
+    "description": "Compress npm install output. Discard dependency trees and progress, preserve warnings and audit.",
+    "match_criteria": {
+        "tool_names": ["npm", "pnpm", "yarn", "bun"],
+        "argv_includes": ["install", "i", "add"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^npm WARN deprecated",
+            "^npm notice",
+            "^npm http",
+            "^npm fetch",
+            "^up to date",
+            "^added \\d+ packages?",
+            "^removed \\d+ packages?",
+            "^changed \\d+ packages?"
+        ],
+        "keep_patterns": [
+            "^npm ERR!",
+            "^npm error",
+            "^npm WARN .*vulnerabilit",
+            "^\\d+ (vulnerabilit|packages? (is|are) looking)",
+            "^found \\d+ vulnerabilities",
+            "^run `npm audit fix`"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true
+    },
+    "summarize": {
+        "head_lines": 5,
+        "tail_lines": 20,
+        "max_chars": 4000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text"
+}

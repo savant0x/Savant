@@ -1,0 +1,39 @@
+[package]
+name = "savant_echo"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+# Async Runtime & Concurrency
+tokio = { version = "1.36", features = ["full", "tracing"] }
+arc-swap = "1.6.0" # Epoch-based lock-free pointer swapping
+futures = "0.3"
+
+# File System Watching
+notify = "8.2.0" # Cross-platform async file watcher
+notify-debouncer-mini = "0.6.0"
+
+# WebAssembly & Compilation
+wasmtime = { workspace = true }
+wit-bindgen = "0.24"
+
+# Telemetry & Math for Circuit Breaker
+tracing = "0.1"
+statrs = "0.16" # Statistical analysis for error rates
+
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Savant internal
+savant_core = { workspace = true }
+savant_ipc = { workspace = true }
+savant_security = { workspace = true }
+
+# OS Sandboxing for the Compiler (Linux Only)
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.3.0"
+
+[lints]
+workspace = true

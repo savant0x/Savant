@@ -1,0 +1,32 @@
+{
+    "id": "observability/free",
+    "family": "Observability",
+    "description": "Compress free output. Strip header, preserve memory totals and usage.",
+    "match_criteria": {
+        "tool_names": ["free"],
+        "argv0": ["free"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^Swap:"
+        ],
+        "keep_patterns": [
+            "^Mem:",
+            "^total"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 5,
+        "tail_lines": 2,
+        "max_chars": 1000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 2,
+    "output_hint": "text"
+}

@@ -30,7 +30,97 @@ and gets tagged on the next release. Cross-ref:
 
 ---
 
-## [Unreleased]
+## v0.0.4 — 2026-07-13
+
+Work-in-progress since v0.0.3. Captures FID-016 (Rust core restored —
+21 crates + `lib/cortexadb/` + 4 root configs from `Savant-backup/`)
++ FID-016r2 (surgical rename `savant_core` → `savant_shell` in the
+`src-tauri/` `[lib]` block to close the 3 cargo-build filename-collision
+warnings; SUB-FID lives inline in the FID-016 row above per the
+SUB-FID convention — no separate row needed) + FID-017 (Reflections
+Viewer MVP — 5 Tauri commands + `AppState` + LENSES array port +
+2 new React hooks + Markdown renderer swap from hand-rolled to
+`react-markdown@^10.1.0` + `remark-gfm@^4.0.1`) + the License MIT →
+Apache 2.0 forward-effectivity switch (existing v0.0.3 and earlier
+remain MIT — preserved under their original license per the
+forward-effectivity clause). Tagged `## v0.0.4 — 2026-07-13` at the
+release cut per the release-only-versioning discipline; work-in-progress
+against v0.0.5 lives under `## [Unreleased]` below. Verified clean:
+`cargo build --workspace` (2:05, 0/0); `cargo check --workspace`
+(2:18, 0/0); `npx tsc --noEmit` (clean); `npm run build` (17/17
+routes); `npx prettier --check` (clean on the close-out files —
+the 217 pre-existing repo files are out-of-scope per FID-009/FID-017
+historical pattern). Plus the brick-level FID-016r2 artifact inspection
+confirmed `savant_shell.{dll,lib,pdb,d,dll.exp,dll.lib}` + 
+`savant_core.{dll,lib,pdb,d,dll.exp,dll.lib}` + `savant-core.exe` =
+13 distinct artifact basenames, 0 collisions.
+
+**TLDR:** Rust core restored under the renderer; lib basename collision
+closed via surgical 4-file rename; reflections viewer with 5 IPC commands
++ lens rotation + react-markdown swap; license forward-switched to
+Apache 2.0 with `[Unreleased]` re-opened for v0.0.5 work. FID-016r2 is
+a SUB-FID of FID-016 (audit-driven restore of incomplete rename
+provenance — closes the LESSON-025 forward-effective cross-link);
+
+### Added
+
+- **Rust core restored (FID-016)** — `Savant/` now contains the full savant-orig Rust workspace as a 22-member cargo workspace. Copied 21 crates (`core, gateway, agent, skills, mcp, channels, canvas, cognitive, ipc, memory, dream, panopticon, obsidian, integrations, security, sandbox, echo, browser, toolforge, generation, schema`; ~566M / 121K LOC) + `lib/cortexadb/` (5.2M / 22,816 LOC) + 4 root configs (Cargo.lock, clippy.toml, rustfmt.toml, deny.toml) from `Savant-backup/`. New `Savant/Cargo.toml` members: `src-tauri` + the 21 restored crates. `[workspace.dependencies]` is `Savant-backup`'s verbatim (minus 4 `savant_cli_*` paths; the `crates/cli/*` subtree and `crates/desktop/src-tauri` are excluded as the terminal CLI + old Tauri host are replaced by the current `Savant/src-tauri/` + the Next.js dashboard). Verified clean: `cargo check --workspace` (3:23, 0 errors, 0 warnings) + `cargo build --workspace` (6:32, 0 errors, 3 filename-collision warnings tracked as FID-016r2). 0 hard stubs across the 21 crates — the savant-orig "no AI slop" discipline is mechanically verified. Cross-ref: [`dev/fids/FID-2026-07-13-016-restore-rust-core.md`]. **This is the foundation for FID-017+ per-subsystem wiring** (inner monologue MVP, memory browser, skills marketplace, etc.).
+
+- **Reflections Viewer MVP (FID-017)** — [`src-tauri/src/lib.rs`] adds 5 Tauri commands
+  (`start_consciousness` / `stop_consciousness` / `get_consciousness_state` /
+  `trigger_reflection` / `initialize_app_state`) plus the `AppState` struct
+  (`workspace_path` + `state_handle Arc<AtomicU8>` + `lens_index Mutex<usize>` +
+  daemon lifecycle `JoinHandle + CancellationToken` + `daemon_state`
+  consciousness mirror). The 19-entry `LENSES` array is ported verbatim from
+  [`crates/agent/src/pulse/prompts.rs:147`] to [`src/lib/reflections/lenses.ts`]
+  (no design changes to the 2:1 emergent/operational weighting per
+  LESSON-018 source-faithful rebuild). Two new React hooks:
+  [`src/lib/hooks/use-lens-rotation.ts`] (pure selector — given an index,
+  derives `{ name, prompt, type: EMERGENT|OPERATIONAL|UNKNOWN, index,
+  nextName, prevName, rotationPosition, rotationTotal }` from the LENSES
+  array — NOT a state machine; the index lives in Tauri state) and
+  [`src/lib/hooks/use-reflections.ts`] (boot-time reader for
+  `workspace-savant/REFLECTIONS.md` + `workspace-savant/SOUL.md` with the
+  Tauri-runtime SOUL.md fetch guarded by
+  `if ("__TAURI_INTERNALS__" in window)` to prevent 404 spam in browser
+  preview; journal-style parser `split(/(^|\n)##\s+/)`; legacy-key
+  migration block preserves user data through the rename
+  `savant.monologue.reflections` → `savant.reflections.entries`). New page
+  at [`src/app/reflections/page.tsx`]: control bar + streaming indicator
+  **inline at the top** + journal timeline — single unified stream of
+  consciousness. REFLECTIONS.md format is `## [YYYY-MM-DD HH:MM:SS UTC]
+  [BODY]` with NO per-entry `[LENS]` tag — the lens rotates the LLM
+  prompt angle only; the output is ONE continuous journal of
+  consciousness (per Spencer 2026-07-13: *"all lenses are supposed to
+  be a single stream, not separated by lenses but all joined together"*).
+  Date headers via new `formatFullTimestamp` helper in
+  [`src/lib/format-relative-time.ts`] (`YYYY-MM-DD HH:MM:SS UTC` format);
+  semantic `<time dateTime={r.ts}>` markup for entries. Flat-bordered
+  card design (`rounded-none border border-default/30 px-5 py-4`)
+  replacing earlier over-rounded `rounded-lg` HeroUI surfaces per design
+  feedback. **`mock-ipc.ts` `trigger_reflection`** case integration:
+  real HTTP POST to `https://openrouter.ai/api/v1/chat/completions` when
+  an OpenRouter master key is captured in `mockMasters["openrouter"]`;
+  surfaces 401 with the active key source (`env` vs `vault` vs `none`)
+  + key length so the user can immediately tell WHICH tier is the
+  problem; if both tiers are empty, surfaces a clear "No model
+  configured — set your model in Settings → OpenRouter before triggering
+  reflections" error. No random default model — Settings page is the
+  single point of model choice. **§Perfection Loop 5 — Markdown renderer
+  swap**: the hand-rolled `MarkdownLite` parser (in
+  [`src/lib/markdown-lite.tsx`], ~280 lines covering only h1-h3 /
+  `**bold**` / `*italic*` / `> blockquote` / `---` hr / HTML entities) was
+  replaced with `react-markdown@^10.1.0` + `remark-gfm@^4.0.1` for full
+  CommonMark + GFM coverage (lists with nesting; fenced code blocks;
+  tables; task lists; strikethrough; autolinks; all heading levels; hard
+  line breaks; escape sequences). 97 transitive packages added.
+  [`src/lib/markdown-lite.tsx`] deleted. Per Spencer *"ALL of them,
+  that's the entire point of the parser."* Custom `a` component opens
+  external `http(s)` links in new tabs with `rel="noopener noreferrer"`;
+  internal anchors stay default behavior. XSS-safe by construction (no
+  `dangerouslySetInnerHTML`; ref-based AST traversal → React elements;
+  React's native escaping in string children). Cross-ref:
+  [`dev/fids/archive/FID-2026-07-13-017-reflections-viewer-mvp.md`].
 
 ### Changed
 
@@ -42,6 +132,16 @@ and gets tagged on the next release. Cross-ref:
   (MIT/Apache-2.0). `NOTICE` file added with attribution chain +
   2026-07-13 boilerplate separation note. ECHO `protocol.config.yaml`
   `project.license` field added for metadata symmetry.
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
 
 ## v0.0.3 — 2026-07-13
 

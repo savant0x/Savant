@@ -69,6 +69,8 @@ const PAGE_NAV_ITEMS = [
   { id: "health", href: "/health", label: "Health", icon: "fa-heart-pulse" },
   { id: "faq", href: "/faq", label: "FAQ", icon: "fa-circle-question" },
   { id: "browser", href: "/browser", label: "Browser", icon: "fa-globe" },
+  // FID-017 — Reflections viewer (12-lens rotation + REFLECTIONS.md timeline)
+  { id: "reflections", href: "/reflections", label: "Reflections", icon: "fa-brain" },
 ] as const;
 
 // Display order: items are sorted by label so the sidebar reads

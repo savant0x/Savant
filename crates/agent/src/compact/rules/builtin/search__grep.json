@@ -1,0 +1,30 @@
+{
+    "id": "search/grep",
+    "family": "Search",
+    "description": "Compress grep output. Limit matches per file, group by file path.",
+    "match_criteria": {
+        "tool_names": ["grep"],
+        "argv_includes": ["-r", "-rn", "-ri"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^Binary file"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true
+    },
+    "summarize": {
+        "head_lines": 50,
+        "tail_lines": 10,
+        "max_chars": 6000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text",
+    "counters": {
+        "matches": "."
+    }
+}

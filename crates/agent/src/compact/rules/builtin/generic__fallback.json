@@ -1,0 +1,36 @@
+{
+    "id": "generic/fallback",
+    "family": "Generic",
+    "description": "Fallback rule for any unmatched tool output. Strip ANSI, normalize whitespace, apply head+tail truncation.",
+    "match_criteria": {
+        "tool_names": [],
+        "argv0": [],
+        "argv_includes": [],
+        "command_includes": []
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true,
+        "dedupe_adjacent_lines": false
+    },
+    "summarize": {
+        "head_lines": 100,
+        "tail_lines": 50,
+        "max_chars": 8000
+    },
+    "failure_mode": {
+        "aggressive_truncate": {
+            "head_lines": 100,
+            "tail_lines": 50
+        }
+    },
+    "budget_ms": 5,
+    "output_hint": "text",
+    "min_compression_ratio": 0.0
+}

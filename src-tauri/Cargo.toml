@@ -9,7 +9,7 @@ description = "Savant AI desktop shell (Renderer-first rebuild, Rust core pendin
 readme = "../README.md"
 
 [lib]
-name = "savant_core"
+name = "savant_shell"
 path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -42,6 +42,11 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# FID-017 — Inner monologue wiring (savant_agent)
+savant_agent = { workspace = true }
+savant_core = { workspace = true }
+tokio-util = { workspace = true }
 
 # Note: schemars is reserved for Phase 2 specta bindings; not pulled in Phase 1.
 

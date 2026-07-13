@@ -1,0 +1,389 @@
+use std::collections::{BTreeMap, HashMap};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use super::{
+    command::Command,
+    memory_entry::{MemoryEntry, MemoryId},
+};
+
+#[derive(Error, Debug)]
+pub enum StateMachineError {
+    #[error("Memory not found: {0:?}")]
+    MemoryNotFound(MemoryId),
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+    #[error(
+        "Cross-collection edge is not allowed: from={from:?} ({from_col}) to={to:?} ({to_col})"
+    )]
+    CrossCollectionEdge { from: MemoryId, from_col: String, to: MemoryId, to_col: String },
+}
+
+pub type Result<T> = std::result::Result<T, StateMachineError>;
+
+/// Edge in the memory graph with associated relation type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Edge {
+    pub to: MemoryId,
+    pub relation: String,
+}
+
+/// Deterministic state machine that applies commands and maintains memory state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateMachine {
+    /// All memory entries indexed by ID
+    memories: HashMap<MemoryId, MemoryEntry>,
+    /// Graph adjacency list: from_id -> [(to_id, relation)]
+    graph: HashMap<MemoryId, Vec<Edge>>,
+    /// Temporal index: timestamp -> list of memory IDs (sorted for determinism)
+    temporal_index: BTreeMap<u64, Vec<MemoryId>>,
+}
+
+impl StateMachine {
+    pub fn new() -> Self {
+        Self { memories: HashMap::new(), graph: HashMap::new(), temporal_index: BTreeMap::new() }
+    }
+
+    /// Apply a command to the state machine
+    pub fn apply_command(&mut self, cmd: Command) -> Result<()> {
+        match cmd {
+            Command::Add(entry) => self.add(entry),
+            Command::Delete(id) => self.delete(id),
+            Command::Connect { from, to, relation } => self.connect(from, to, relation),
+            Command::Disconnect { from, to } => self.disconnect(from, to),
+        }
+    }
+
+    /// Insert or update a memory entry
+    pub fn add(&mut self, entry: MemoryEntry) -> Result<()> {
+        let id = entry.id;
+        let timestamp = entry.created_at;
+
+        // If this ID already exists, remove its previous temporal index entry first.
+        if let Some(previous) = self.memories.get(&id) {
+            let old_ts = previous.created_at;
+            let mut remove_old_bucket = false;
+            if let Some(ids) = self.temporal_index.get_mut(&old_ts) {
+                ids.retain(|&mid| mid != id);
+                remove_old_bucket = ids.is_empty();
+            }
+            if remove_old_bucket {
+                self.temporal_index.remove(&old_ts);
+            }
+        }
+
+        self.memories.insert(id, entry);
+
+        // Add to temporal index
+        self.temporal_index.entry(timestamp).or_default().push(id);
+
+        // Keep temporal index sorted for determinism
+        if let Some(ids) = self.temporal_index.get_mut(&timestamp) {
+            ids.sort();
+            ids.dedup();
+        }
+
+        Ok(())
+    }
+
+    /// Delete a memory entry and its edges
+    pub fn delete(&mut self, id: MemoryId) -> Result<()> {
+        if !self.memories.contains_key(&id) {
+            return Err(StateMachineError::MemoryNotFound(id));
+        }
+
+        self.memories.remove(&id);
+
+        // Remove from graph
+        self.graph.remove(&id);
+        for edges in self.graph.values_mut() {
+            edges.retain(|e| e.to != id);
+        }
+
+        // Remove from temporal index
+        for ids in self.temporal_index.values_mut() {
+            ids.retain(|&mid| mid != id);
+        }
+
+        Ok(())
+    }
+
+    /// Add an edge between two memories
+    pub fn connect(&mut self, from: MemoryId, to: MemoryId, relation: String) -> Result<()> {
+        let from_entry = self.memories.get(&from).ok_or(StateMachineError::MemoryNotFound(from))?;
+        let to_entry = self.memories.get(&to).ok_or(StateMachineError::MemoryNotFound(to))?;
+
+        if from_entry.collection != to_entry.collection {
+            return Err(StateMachineError::CrossCollectionEdge {
+                from,
+                from_col: from_entry.collection.clone(),
+                to,
+                to_col: to_entry.collection.clone(),
+            });
+        }
+
+        let edges = self.graph.entry(from).or_default();
+        // Avoid duplicate edges
+        if !edges.iter().any(|e| e.to == to && e.relation == relation) {
+            edges.push(Edge { to, relation });
+            // Keep edges sorted for determinism
+            edges.sort_by_key(|e| (e.to, e.relation.clone()));
+        }
+
+        Ok(())
+    }
+
+    pub fn collection_of(&self, id: MemoryId) -> Result<&str> {
+        self.memories
+            .get(&id)
+            .map(|e| e.collection.as_str())
+            .ok_or(StateMachineError::MemoryNotFound(id))
+    }
+
+    /// Remove an edge between two memories
+    pub fn disconnect(&mut self, from: MemoryId, to: MemoryId) -> Result<()> {
+        if let Some(edges) = self.graph.get_mut(&from) {
+            edges.retain(|e| e.to != to);
+        }
+        Ok(())
+    }
+
+    /// Get a memory by ID
+    pub fn get_memory(&self, id: MemoryId) -> Result<&MemoryEntry> {
+        self.memories.get(&id).ok_or(StateMachineError::MemoryNotFound(id))
+    }
+
+    /// Get all memories in a collection
+    pub fn get_memories_in_collection(&self, collection: &str) -> Vec<&MemoryEntry> {
+        let mut entries: Vec<_> =
+            self.memories.values().filter(|e| e.collection == collection).collect();
+        entries.sort_by_key(|e| e.id);
+        entries
+    }
+
+    /// Get memories created in a time range (inclusive)
+    pub fn get_memories_in_time_range(&self, start: u64, end: u64) -> Vec<&MemoryEntry> {
+        let mut result = Vec::new();
+        for (_, ids) in self.temporal_index.range(start..=end) {
+            for id in ids {
+                if let Some(entry) = self.memories.get(id) {
+                    result.push(entry);
+                }
+            }
+        }
+        result.sort_by_key(|e| e.id);
+        result
+    }
+
+    pub fn get_neighbors(&self, id: MemoryId) -> Result<Vec<(MemoryId, String)>> {
+        if !self.memories.contains_key(&id) {
+            return Err(StateMachineError::MemoryNotFound(id));
+        }
+        let Some(edges) = self.graph.get(&id) else {
+            return Ok(Vec::new());
+        };
+        let mut neighbors: Vec<_> = edges.iter().map(|e| (e.to, e.relation.clone())).collect();
+        neighbors.sort_by_key(|n| (n.0, n.1.clone()));
+        Ok(neighbors)
+    }
+
+    /// Get size of state
+    pub fn len(&self) -> usize {
+        self.memories.len()
+    }
+
+    /// Get all memories in deterministic ID order.
+    pub fn all_memories(&self) -> Vec<&MemoryEntry> {
+        let mut entries: Vec<&MemoryEntry> = self.memories.values().collect();
+        entries.sort_by_key(|e| e.id);
+        entries
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.memories.is_empty()
+    }
+}
+
+impl Default for StateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_entry(id: u64, collection: &str, timestamp: u64) -> MemoryEntry {
+        MemoryEntry::new(
+            MemoryId(id),
+            collection.to_string(),
+            format!("content_{}", id).into_bytes(),
+            timestamp,
+        )
+    }
+
+    #[test]
+    fn test_state_machine_creation() {
+        let sm = StateMachine::new();
+        assert!(sm.is_empty());
+        assert_eq!(sm.len(), 0);
+    }
+
+    #[test]
+    fn test_insert_and_retrieve_memory() {
+        let mut sm = StateMachine::new();
+        let entry = create_test_entry(1, "default", 1000);
+        sm.add(entry.clone()).unwrap();
+
+        assert_eq!(sm.len(), 1);
+        let retrieved = sm.get_memory(MemoryId(1)).unwrap();
+        assert_eq!(retrieved.id, MemoryId(1));
+    }
+
+    #[test]
+    fn test_delete() {
+        let mut sm = StateMachine::new();
+        let entry = create_test_entry(1, "default", 1000);
+        sm.add(entry).unwrap();
+        assert_eq!(sm.len(), 1);
+
+        sm.delete(MemoryId(1)).unwrap();
+        assert_eq!(sm.len(), 0);
+        assert!(sm.get_memory(MemoryId(1)).is_err());
+    }
+
+    #[test]
+    fn test_connect_and_disconnect() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(2, "default", 1000)).unwrap();
+
+        sm.connect(MemoryId(1), MemoryId(2), "refers_to".to_string()).unwrap();
+
+        let neighbors = sm.get_neighbors(MemoryId(1)).unwrap();
+        assert_eq!(neighbors.len(), 1);
+        assert_eq!(neighbors[0].0, MemoryId(2));
+        assert_eq!(neighbors[0].1, "refers_to");
+
+        sm.disconnect(MemoryId(1), MemoryId(2)).unwrap();
+        let neighbors = sm.get_neighbors(MemoryId(1)).unwrap();
+        assert!(neighbors.is_empty());
+    }
+
+    #[test]
+    fn test_temporal_index() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(2, "default", 2000)).unwrap();
+        sm.add(create_test_entry(3, "default", 1500)).unwrap();
+
+        let range = sm.get_memories_in_time_range(1000, 1500);
+        assert_eq!(range.len(), 2);
+        // Check deterministic ordering
+        assert_eq!(range[0].id, MemoryId(1));
+        assert_eq!(range[1].id, MemoryId(3));
+    }
+
+    #[test]
+    fn test_insert_update_replaces_old_temporal_timestamp() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(1, "default", 3000)).unwrap();
+
+        assert_eq!(sm.len(), 1);
+        assert!(sm.get_memories_in_time_range(1000, 1000).is_empty());
+        let new_range = sm.get_memories_in_time_range(3000, 3000);
+        assert_eq!(new_range.len(), 1);
+        assert_eq!(new_range[0].id, MemoryId(1));
+    }
+
+    #[test]
+    fn test_all_memories_deterministic_order() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(3, "default", 1000)).unwrap();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(2, "default", 1000)).unwrap();
+
+        let all = sm.all_memories();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].id, MemoryId(1));
+        assert_eq!(all[1].id, MemoryId(2));
+        assert_eq!(all[2].id, MemoryId(3));
+    }
+
+    #[test]
+    fn test_collection_filtering() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "ns1", 1000)).unwrap();
+        sm.add(create_test_entry(2, "ns2", 1000)).unwrap();
+        sm.add(create_test_entry(3, "ns1", 1000)).unwrap();
+
+        let ns1_entries = sm.get_memories_in_collection("ns1");
+        assert_eq!(ns1_entries.len(), 2);
+        assert_eq!(ns1_entries[0].id, MemoryId(1));
+        assert_eq!(ns1_entries[1].id, MemoryId(3));
+    }
+
+    #[test]
+    fn test_edge_not_found() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+
+        // Try to add edge to non-existent memory
+        let result = sm.connect(MemoryId(1), MemoryId(999), "refers".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_apply_command() {
+        let mut sm = StateMachine::new();
+        let entry = create_test_entry(1, "default", 1000);
+        let cmd = Command::Add(entry);
+        sm.apply_command(cmd).unwrap();
+        assert_eq!(sm.len(), 1);
+    }
+
+    #[test]
+    fn test_deterministic_edge_ordering() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(2, "default", 1000)).unwrap();
+        sm.add(create_test_entry(3, "default", 1000)).unwrap();
+
+        // Add edges in different order
+        sm.connect(MemoryId(1), MemoryId(3), "rel".to_string()).unwrap();
+        sm.connect(MemoryId(1), MemoryId(2), "rel".to_string()).unwrap();
+
+        let neighbors = sm.get_neighbors(MemoryId(1)).unwrap();
+        assert_eq!(neighbors[0].0, MemoryId(2)); // Deterministically ordered
+        assert_eq!(neighbors[1].0, MemoryId(3));
+    }
+
+    #[test]
+    fn test_delete_cleans_edges() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "default", 1000)).unwrap();
+        sm.add(create_test_entry(2, "default", 1000)).unwrap();
+
+        sm.connect(MemoryId(1), MemoryId(2), "refers".to_string()).unwrap();
+
+        // Delete memory 2
+        sm.delete(MemoryId(2)).unwrap();
+
+        // Edge should be cleaned up
+        let neighbors = sm.get_neighbors(MemoryId(1)).unwrap();
+        assert!(neighbors.is_empty());
+    }
+
+    #[test]
+    fn test_cross_collection_edge_rejected() {
+        let mut sm = StateMachine::new();
+        sm.add(create_test_entry(1, "ns1", 1000)).unwrap();
+        sm.add(create_test_entry(2, "ns2", 1000)).unwrap();
+
+        let result = sm.connect(MemoryId(1), MemoryId(2), "bad".to_string());
+        assert!(matches!(result, Err(StateMachineError::CrossCollectionEdge { .. })));
+    }
+}

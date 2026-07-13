@@ -1,0 +1,55 @@
+[package]
+name = "savant_memory"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+# Storage substrate (CortexaDB vector+graph engine)
+cortexadb-core = { workspace = true }
+ruvector-core = { workspace = true }
+dashmap = { workspace = true }
+jsonwebtoken = "9.3"
+blake3 = "1.5"
+sha2 = "0.10"
+
+# Zero-copy serialization
+rkyv = { workspace = true }
+bytecheck = { workspace = true }
+rend = { workspace = true }
+
+# Async & Utilities
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+thiserror = "1.0"
+uuid = { version = "1.8", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+futures = "0.3"
+
+# E1: Cross-encoder reranking via ONNX Runtime
+ort = { version = "=2.0.0-rc.12", optional = true }
+
+# Core types and traits
+savant_core = { path = "../core" }
+savant_ipc = { path = "../ipc" }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+regex-lite = "0.1"
+lru = "0.12"
+tokio-util = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+tempfile = "3"
+
+[features]
+default = []
+persist_sync = []
+kani = []
+test-utils = []
+cross-encoder = ["ort"]

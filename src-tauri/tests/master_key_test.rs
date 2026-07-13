@@ -1,6 +1,6 @@
 //! Integration tests for the master-key vault 5-strategy cascade.
 
-use savant_core::security::master_key;
+use savant_shell::security::master_key;
 
 #[tokio::test]
 async fn empty_vault_returns_default_when_no_file() {

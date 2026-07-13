@@ -1,0 +1,39 @@
+{
+    "id": "docker/build",
+    "family": "Infrastructure",
+    "description": "Compress docker build output. Strip layer hashes and step noise, preserve COPY/RUN commands and result.",
+    "match_criteria": {
+        "tool_names": ["docker"],
+        "argv_includes": ["build"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^ ---> ",
+            "^Step \\d+/\\d+ :",
+            "^Successfully built",
+            "^Successfully tagged"
+        ],
+        "keep_patterns": [
+            "^Step \\d+/\\d+ : (COPY|RUN|FROM|WORKDIR|CMD|ENTRYPOINT)",
+            "^ ---> Running in",
+            "^error",
+            "^Error",
+            "^failed to",
+            "^The command .* returned a non-zero"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": true
+    },
+    "summarize": {
+        "head_lines": 10,
+        "tail_lines": 20,
+        "max_chars": 5000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text"
+}

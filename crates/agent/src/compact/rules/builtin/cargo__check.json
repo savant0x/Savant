@@ -1,0 +1,43 @@
+{
+    "id": "cargo/check",
+    "family": "Build",
+    "description": "Compress cargo check output. Discard compilation progress, preserve errors and warnings.",
+    "match_criteria": {
+        "tool_names": ["cargo"],
+        "argv_includes": ["check"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^   Compiling ",
+            "^    Checking ",
+            "^     Running ",
+            "^   Finished "
+        ],
+        "keep_patterns": [
+            "^error",
+            "^warning",
+            "^  --> ",
+            "^  = note:",
+            "^  = help:",
+            "^Some errors have"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": false
+    },
+    "summarize": {
+        "head_lines": 10,
+        "tail_lines": 50,
+        "max_chars": 8000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text",
+    "counters": {
+        "errors": "^error",
+        "warnings": "^warning"
+    }
+}

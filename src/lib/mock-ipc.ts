@@ -20,6 +20,7 @@ import {
   generateSoulStream,
   type ManifestStreamEvent,
 } from "./manifest-mock";
+import { LENSES } from "./reflections/lenses";
 import type {
   AgentManifestPlan,
   BootstrapTier,
@@ -63,6 +64,21 @@ const LS_PROFILES = "savant.vault.profiles";
 // HMR (HMR resets the module, which is fine — the manifest page
 // re-reads on mount). Phase 2 will replace with real Rust state.
 const LS_SWARM_BASELINE = "savant.bulk.baseline";
+// FID-017 — Reflections entries (browser preview stand-in for
+// `workspace-savant/REFLECTIONS.md`). Written by the mock
+// `trigger_reflection` case; read by `useReflections` so the
+// timeline section can show the latest entries. Cleared on HMR
+// (HMR resets the module); the Tauri runtime reads/writes the real
+// `workspace-savant/REFLECTIONS.md` via the savant_agent crate.
+// Shared with `src/lib/hooks/use-reflections.ts` — single source of
+// truth for the localStorage key (both files import the same const).
+//
+// Key renamed 2026-07-13 from `savant.monologue.reflections` to
+// `savant.reflections.entries` for naming hygiene (the dashboard
+// feature is "reflections", not "monologue"). Old entries in
+// users' localStorage from before the rename are silently ignored —
+// the new write path starts a fresh stream.
+const MOCK_REFLECTIONS_KEY = "savant.reflections.entries";
 
 let mockProfiles: ProfileSummary[] = [];
 let mockConfig: AppConfig | null = null;
@@ -203,6 +219,15 @@ const builtSouls: BuiltSoulEntry[] = [];
 const OPENROUTER_PROVISION_URL = "https://openrouter.ai/api/v1/keys";
 const OPENROUTER_DELETE_KEY_URL_FMT = (hash: string): string =>
   `https://openrouter.ai/api/v1/keys/${hash}`;
+
+// FID-017 — chat-completion URL for the inner monologue mock. The
+// model itself is NOT hardcoded — the page reads it from the user's
+// saved config (via useLoadedConfig) and passes it through the
+// triggerReflection args. The Settings page is the only place a
+// model gets chosen; this mock honors that choice and errors out
+// (rather than falling back to a random default) if no model is
+// configured.
+const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export function setupMockIPC(): void {
   if (typeof window === "undefined") return; // server-side, no-op
@@ -634,6 +659,193 @@ export function setupMockIPC(): void {
         } catch {
           return [];
         }
+      }
+
+      // ───────────────────────────────────────────────────────────
+      // FID-017 — Inner monologue mock cases
+      // ───────────────────────────────────────────────────────────
+
+      // MOCK_REFLECTIONS_KEY is declared at module scope (see the
+      // top of this file, near LS_SWARM_BASELINE) so it's accessible
+      // to both this write path AND the read path in
+      // useReflections (same localStorage key, single source of truth).
+
+      case "initialize_app_state": {
+        // noop — AppState is initialized at startup in Tauri runtime;
+        // browser preview has no concept of "startup" for this.
+        return null;
+      }
+
+      case "start_consciousness": {
+        // Cycle THINKING -> IDLE -> DORMANT -> WONDERING every 5s.
+        // (Browser preview — no actual daemon, just visual feedback.)
+        const state = (globalThis as { __savantConsciousness?: {
+          intervalId: number | null;
+          current: "THINKING" | "IDLE" | "DORMANT" | "WONDERING";
+          cycleIndex: number;
+        } }).__savantConsciousness ?? {
+          intervalId: null,
+          current: "IDLE" as const,
+          cycleIndex: 0,
+        };
+        if (state.intervalId !== null) {
+          (globalThis as { __savantConsciousness?: typeof state }).__savantConsciousness = state;
+          return state.current;
+        }
+        state.intervalId = window.setInterval(() => {
+          state.cycleIndex = (state.cycleIndex + 1) % 4;
+          state.current = (["THINKING", "IDLE", "DORMANT", "WONDERING"] as const)[
+            state.cycleIndex
+          ];
+        }, 5000);
+        state.current = "THINKING";
+        state.cycleIndex = 0;
+        (globalThis as { __savantConsciousness?: typeof state }).__savantConsciousness = state;
+        return "THINKING";
+      }
+
+      case "stop_consciousness": {
+        const state = (globalThis as { __savantConsciousness?: {
+          intervalId: number | null;
+          current: "THINKING" | "IDLE" | "DORMANT" | "WONDERING";
+          cycleIndex: number;
+        } }).__savantConsciousness;
+        if (state?.intervalId !== null && state?.intervalId !== undefined) {
+          window.clearInterval(state.intervalId);
+        }
+        if (state) {
+          state.intervalId = null;
+          state.current = "IDLE";
+        }
+        return null;
+      }
+
+      case "get_consciousness_state": {
+        const state = (globalThis as { __savantConsciousness?: {
+          intervalId: number | null;
+          current: "THINKING" | "IDLE" | "DORMANT" | "WONDERING";
+          cycleIndex: number;
+        } }).__savantConsciousness;
+        return state?.current ?? "IDLE";
+      }
+
+      case "trigger_reflection": {
+        const override = typeof args.lensOverride === "string" ? args.lensOverride : null;
+        // Module-scoped lens index (resets on HMR). The actual LENSES
+        // array lives at src/lib/inner-monologue/lenses.ts (TS port of
+        // crates/agent/src/pulse/prompts.rs::LENSES). 19 entries.
+        const idxKey = "savant.monologue.lensIndex";
+        const currentIdx = Number(window.localStorage.getItem(idxKey) ?? "0");
+        // Pick the lens — overridden or rotated through the 19-entry
+        // LENSES array (NOT a hardcoded EMERGENCE). Both branches
+        // return the same `readonly [string, string]` tuple shape so
+        // `lens[0]` / `lens[1]` work uniformly below (TS7053 would
+        // fire if the override branch produced `{ name, prompt }`
+        // instead — tuples don't accept object indexing and vice versa).
+        const lens: readonly [string, string] = override
+          ? [override, LENSES.find((l) => l[0] === override)?.[1] ?? `[lens: ${override}]`]
+          : LENSES[currentIdx % LENSES.length];
+        const nextIdx = (currentIdx + 1) % LENSES.length;
+        window.localStorage.setItem(idxKey, String(nextIdx));
+        // Build the prompt and call OpenRouter (real HTTP, mirrors
+        // manifest_soul pattern).
+        const masterKey = effectiveMasterKey("openrouter");
+        if (!masterKey) {
+          return `[mock reflection — no master key] Lens: ${lens[0]}. Set up your OpenRouter master key in Settings to enable real reflections.`;
+        }
+        // Capture the active key source + length for 401 diagnostics.
+        // Knowing WHICH tier is active (env var vs vault) is the first
+        // step to fixing an auth failure — and the 401 from OpenRouter
+        // is the same either way (they reject the key, not the source).
+        const keySource = _envMasterKey
+          ? "env"
+          : mockMasters["openrouter"]
+            ? "vault"
+            : "none";
+        const keyLength = masterKey.length;
+        // Model is sourced from the user's saved config (set via
+        // Settings page). The page passes it explicitly in args; we
+        // also fall back to mockConfig (set by save_config) as a
+        // defense-in-depth check. NO hardcoded default — the Settings
+        // page is the only way to set a model, and if neither source
+        // is set we surface a clear error pointing the user there.
+        // The whole point of Settings is the user picks the model;
+        // we never override that choice with a random default.
+        // Throws (not returns) so the page's catch block routes this
+        // to the red error banner — a returned string would otherwise
+        // render in the live-reflection card as if it were a real
+        // reflection, hiding the actual problem from the user.
+        const model = String(args.model ?? mockConfig?.modelId ?? "");
+        if (!model) {
+          throw new Error(
+            `No model configured. Set your model in Settings → OpenRouter before triggering reflections. (Lens: ${lens[0]})`,
+          );
+        }
+        const response$ = (async (): Promise<string> => {
+          const response = await fetch(OPENROUTER_CHAT_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${masterKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer":
+                typeof window !== "undefined" ? window.location.origin : "https://savant.local",
+              "X-Title": "Savant Inner Monologue",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: "system",
+                  content: `${lens[1]}\n\nYou are Savant. Reflect on whatever comes to mind using this lens. Write freely in Markdown.`,
+                },
+              ],
+            }),
+          });
+          if (!response.ok) {
+            const text = await response.text();
+            // 401 with "User not found" is OpenRouter's specific response
+            // to an invalid or unknown API key — NOT a transient outage.
+            // Surface the active source + key length so the user can
+            // immediately tell WHICH tier is the problem (env var vs
+            // vault) without having to grep their own config. The
+            // original error from OpenRouter is included verbatim.
+            if (response.status === 401) {
+              throw new Error(
+                `OpenRouter rejected the API key (401 User not found). ` +
+                `Active source: ${keySource} (length: ${keyLength}). ` +
+                `If source is "env", check your OPENROUTER_MASTER_KEY env var (.env or shell). ` +
+                `If source is "vault", update via Settings → OpenRouter Master Key. ` +
+                `Env var shadows the vault when set. ` +
+                `Original: ${text.slice(0, 120)}`,
+              );
+            }
+            throw new Error(
+              `OpenRouter /v1/chat/completions ${response.status}: ${text.slice(0, 200)}`,
+            );
+          }
+          const parsed = (await response.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+          };
+          const narrative = parsed.choices?.[0]?.message?.content ?? "(empty reflection)";
+          // Persist to localStorage as a REFLECTIONS.md stand-in.
+          // NO lens tag — the consciousness stream is a single continuous
+          // journal, not a per-lens partition (FID-017 correction 2026-07-13
+          // per Spencer: "all lenses are supposed to be a single stream, not
+          // separated by lenses but all joined together"). The lens is used
+          // internally to pick the LLM prompt angle; the output narrative
+          // is one thread of consciousness with no per-entry lens tag.
+          const ts = new Date().toISOString();
+          const existing = JSON.parse(
+            window.localStorage.getItem(MOCK_REFLECTIONS_KEY) ?? "[]",
+          ) as Array<{ ts: string; content: string }>;
+          existing.unshift({ ts, content: narrative });
+          window.localStorage.setItem(
+            MOCK_REFLECTIONS_KEY,
+            JSON.stringify(existing.slice(0, 100)),
+          );
+          return narrative;
+        })();
+        return response$;
       }
 
       default:

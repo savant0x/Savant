@@ -1,0 +1,50 @@
+[advisories]
+version = 2
+unmaintained = "workspace"
+unsound = "workspace"
+ignore = [
+    # backoff — unmaintained, transitive dep via tonic. Accepted risk.
+    "RUSTSEC-2025-0012",
+    # bincode — unmaintained, transitive dep. Accepted risk.
+    "RUSTSEC-2025-0141",
+    # rkyv IterMut — unsound, requires custom allocator. Not triggered by our usage.
+    "RUSTSEC-2026-0002",
+    # pqcrypto-dilithium — replaced by pqcrypto-mldsa. Migration planned.
+    "RUSTSEC-2024-0380",
+    # rustls-webpki — name constraint / CRL issues. TLS to public endpoints only.
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0049",
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "0BSD",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "OpenSSL",
+    "Apache-2.0 WITH LLVM-exception",
+    "CC0-1.0",
+    "NCSA",
+    "LicenseRef-Proprietary",
+    "CDLA-Permissive-2.0",
+    "BSL-1.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/microsoft/wassette", "https://github.com/modelcontextprotocol/rust-sdk"]

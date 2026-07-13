@@ -1,0 +1,15 @@
+[package]
+name = "cortexadb-py"
+version = "0.1.8"
+edition = "2021"
+
+[lib]
+name = "_cortexadb"
+crate-type = ["cdylib"]
+
+[dependencies]
+cortexadb-core = { path = "../cortexadb-core" }
+pyo3 = { version = "0.24", features = ["extension-module"] }
+
+[package.metadata.maturin]
+name = "cortexadb"

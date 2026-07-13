@@ -1,0 +1,28 @@
+{
+    "id": "gh/pr/list",
+    "family": "Cloud",
+    "description": "Compress gh pr list output. Convert table to compact format, preserve PR numbers and titles.",
+    "match_criteria": {
+        "tool_names": ["gh"],
+        "argv_includes": ["pr", "list"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^Showing \\d+ of \\d+"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 30,
+        "tail_lines": 5,
+        "max_chars": 4000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "table"
+}

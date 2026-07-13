@@ -1,0 +1,28 @@
+{
+    "id": "filesystem/find",
+    "family": "FileSystem",
+    "description": "Compress find output. Group by directory, limit total results.",
+    "match_criteria": {
+        "tool_names": ["find", "fd"],
+        "argv0": ["find", "fd"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^\\./\\.git/",
+            "^\\./node_modules/",
+            "^\\./target/"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true
+    },
+    "summarize": {
+        "head_lines": 50,
+        "tail_lines": 5,
+        "max_chars": 4000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 2,
+    "output_hint": "text"
+}

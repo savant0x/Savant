@@ -6,8 +6,8 @@
 //! ambient `SAVANT_OPENROUTER_API_KEY` env vars (the spirit of the
 //! per-hermes-rs OAUTH_DESIGN.md auth profile model).
 
-use savant_core::inference::openrouter::{self, InferenceError};
-use savant_core::security::master_key::{self, VaultError};
+use savant_shell::inference::openrouter::{self, InferenceError};
+use savant_shell::security::master_key::{self, VaultError};
 use std::env;
 
 #[tokio::test]

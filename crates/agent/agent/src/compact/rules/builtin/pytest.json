@@ -1,0 +1,41 @@
+{
+    "id": "pytest",
+    "family": "Testing",
+    "description": "Compress pytest output. Preserve failures and summary, strip passing test noise.",
+    "match_criteria": {
+        "tool_names": ["pytest", "python"],
+        "argv_includes": ["pytest", "-m", "test"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^\\s+PASSED",
+            "^\\s+\\.{1,3}",
+            "^collecting \\.\\.\\.",
+            "^collected \\d+ items?$"
+        ],
+        "keep_patterns": [
+            "^\\s+FAILED",
+            "^FAILED ",
+            "^ERROR ",
+            "^_{3,}",
+            "^E ",
+            "^\\d+ failed",
+            "^\\d+ passed",
+            "short test summary"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": true
+    },
+    "summarize": {
+        "head_lines": 10,
+        "tail_lines": 40,
+        "max_chars": 8000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 5,
+    "output_hint": "text"
+}

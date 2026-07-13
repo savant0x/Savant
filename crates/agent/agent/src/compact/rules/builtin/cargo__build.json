@@ -1,0 +1,39 @@
+{
+    "id": "cargo/build",
+    "family": "Build",
+    "description": "Compress cargo build output. Discard compilation progress, preserve errors and final result.",
+    "match_criteria": {
+        "tool_names": ["cargo"],
+        "argv_includes": ["build"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^   Compiling ",
+            "^    Checking ",
+            "^     Running ",
+            "^   Finished "
+        ],
+        "keep_patterns": [
+            "^error",
+            "^warning",
+            "^  --> ",
+            "^  = note:",
+            "Compiling .* v[0-9]",
+            "^    Finished ",
+            "^error: could not compile"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true
+    },
+    "summarize": {
+        "head_lines": 5,
+        "tail_lines": 30,
+        "max_chars": 6000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text"
+}

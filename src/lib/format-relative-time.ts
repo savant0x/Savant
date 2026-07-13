@@ -96,3 +96,46 @@ export function formatRelativeTime(
   // > 1 week → ISO date (locale-free, YAML-friendly, sortable).
   return new Date(ts).toISOString().slice(0, 10);
 }
+
+/**
+ * FID-017 — Format an ISO-8601 timestamp as a full date+time string
+ * for use as a reflection entry header. Format: "YYYY-MM-DD HH:MM:SS UTC"
+ * — locale-free, sortable, matches the `## YYYY-MM-DD HH:MM:SS UTC`
+ * header format used in workspace-savant/REFLECTIONS.md (per
+ * `parseReflectionsMd` in use-reflections.ts).
+ *
+ * The format is deliberately ISO-style rather than human-friendly
+ * ("Jul 13, 2026 · 12:34 PM") so:
+ * - Diary entries look like a journal, not a chat timestamp
+ * - The format matches the underlying file (consistency)
+ * - Sort order is the visual order
+ * - No locale dependency (the user might change browser locale)
+ *
+ * Invalid input (`NaN` timestamp) returns "—" so the UI shows a
+ * visible placeholder rather than crashing.
+ *
+ * @example
+ *   formatFullTimestamp("2026-07-13T12:34:56.789Z")  // "2026-07-13 12:34:56 UTC"
+ *   formatFullTimestamp(new Date("invalid"))         // "—"
+ */
+export function formatFullTimestamp(input: Date | number | string): string {
+  // Narrow the union explicitly so TS knows when .getTime() is
+  // available (Date only) vs when the value is already an epoch
+  // number vs a stringified timestamp. The three-branch pattern
+  // beats chained ternaries here because each branch needs different
+  // narrowing logic.
+  const ts: number =
+    input instanceof Date
+      ? input.getTime()
+      : typeof input === "string"
+        ? Date.parse(input)
+        : input;
+  if (Number.isNaN(ts)) return "—";
+  const d = new Date(ts);
+  // YYYY-MM-DD HH:MM:SS UTC — pad each component to 2 digits.
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`
+  );
+}

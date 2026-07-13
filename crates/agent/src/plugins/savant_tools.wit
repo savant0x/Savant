@@ -1,0 +1,10 @@
+package savant:agent-tools;
+
+interface tools {
+    /// Executes the tool logic
+    execute: func(args: string) -> string;
+}
+
+world tool {
+    export tools;
+}

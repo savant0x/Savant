@@ -1,0 +1,32 @@
+package savant:agent-hooks;
+
+interface hooks {
+    /// Result of a hook execution
+    variant hook-result {
+        /// Continue execution as normal
+        continue,
+        /// Modify the input and continue
+        modified(string),
+        /// Halt execution with a reason
+        halt(string),
+    }
+
+    /// Called before sending a prompt to the LLM
+    before-llm-call: func(prompt: string) -> hook-result;
+
+    /// Called after a tool returns a result
+    after-tool-call: func(tool-name: string, tool-result: string) -> hook-result;
+
+    /// Called before emitting the final response to the user
+    before-response-emit: func(response: string) -> hook-result;
+}
+
+interface host {
+    /// Calls a tool on the host. Verified by CCT.
+    call-tool: func(tool-name: string, args: string) -> string;
+}
+
+world plugin {
+    import host;
+    export hooks;
+}

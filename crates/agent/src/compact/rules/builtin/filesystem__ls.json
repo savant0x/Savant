@@ -1,0 +1,29 @@
+{
+    "id": "filesystem/ls",
+    "family": "FileSystem",
+    "description": "Compress ls output. Strip permissions/owner columns, preserve names and sizes.",
+    "match_criteria": {
+        "tool_names": ["ls", "exa", "eza"],
+        "argv0": ["ls", "exa", "eza"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^total \\d+$",
+            "^$",
+            "^\\."
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 50,
+        "tail_lines": 5,
+        "max_chars": 3000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 2,
+    "output_hint": "text"
+}

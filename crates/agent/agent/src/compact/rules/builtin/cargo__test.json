@@ -1,0 +1,44 @@
+{
+    "id": "cargo/test",
+    "family": "Testing",
+    "description": "Compress cargo test output. Collapse passing tests, preserve failures and summary.",
+    "match_criteria": {
+        "tool_names": ["cargo"],
+        "argv_includes": ["test"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^test .* ok$",
+            "^running \\d+ tests?$",
+            "^$"
+        ],
+        "keep_patterns": [
+            "^test .* FAILED",
+            "^---- .* stdout ----",
+            "^thread .* panicked",
+            "^error\\[",
+            "^error:",
+            "^failures:",
+            "^test result:",
+            "^running \\d+ test"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": true
+    },
+    "summarize": {
+        "head_lines": 20,
+        "tail_lines": 30,
+        "max_chars": 8000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 5,
+    "output_hint": "text",
+    "counters": {
+        "passed": "^test .* ok$",
+        "failed": "^test .* FAILED",
+        "ignored": "^test .* ignored$"
+    }
+}

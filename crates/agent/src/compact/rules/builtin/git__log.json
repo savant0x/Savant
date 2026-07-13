@@ -1,0 +1,28 @@
+{
+    "id": "git/log",
+    "family": "VersionControl",
+    "description": "Compress git log output. Preserve commit hashes and messages, strip verbose metadata.",
+    "match_criteria": {
+        "tool_names": ["git"],
+        "argv_includes": ["log"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^Date:",
+            "^Author:",
+            "^$"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true
+    },
+    "summarize": {
+        "head_lines": 30,
+        "tail_lines": 5,
+        "max_chars": 4000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text"
+}

@@ -1,0 +1,527 @@
+import pytest
+import os
+import shutil
+from cortexadb import CortexaDB, CortexaDBError, HashEmbedder
+from cortexadb.chunker import chunk_text
+
+DB_PATH = "/tmp/cortexadb_test_py"
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    if os.path.exists(DB_PATH):
+        shutil.rmtree(DB_PATH)
+    yield
+    if os.path.exists(DB_PATH):
+        shutil.rmtree(DB_PATH)
+
+def test_cortexadb_basic_flow():
+    # 1. Open with dimension 3
+    db = CortexaDB.open(DB_PATH, dimension=3)
+    
+    # 2. Store memory
+    mid = db.add("Hello world", embedding=[1.0, 0.0, 0.0])
+    
+    # 3. Ask
+    hits = db.search("world", embedding=[1.0, 0.0, 0.0])
+    assert len(hits) == 1
+    assert hits[0].id == mid
+    
+    # 4. Get full memory
+    mem = db.get(mid)
+    assert mem.collection == "default"
+    assert mem.id == mid
+    assert bytes(mem.content).decode("utf-8") == "Hello world"
+
+    # 5. Connect
+    mid2 = db.add("Goodbye", embedding=[0.0, 1.0, 0.0])
+    db.connect(mid, mid2, "related")
+
+    # 6. Stats & Len
+    stats = db.stats()
+    assert stats.vector_dimension == 3
+    assert stats.entries == 2
+    assert len(db) == 2
+
+    # 7. Compact and Checkpoint
+    db.compact()
+    db.checkpoint()
+
+
+def test_cortexadb_collections():
+    db = CortexaDB.open(DB_PATH, dimension=3)
+    
+    col_a = db.collection("agent_a")
+    col_b = db.collection("agent_b")
+
+    id_a = col_a.add("I am Agent A", embedding=[1.0, 0.0, 0.0])
+    col_b.add("I am Agent B", embedding=[0.0, 1.0, 0.0])
+
+    assert db.get(id_a).collection == "agent_a"
+    
+    # Test search filters by collection using the wrapper
+    hits_a = col_a.search("Agent A", embedding=[1.0, 0.0, 0.0])
+    assert len(hits_a) == 1
+    assert hits_a[0].id == id_a
+
+    # Context manager test
+    with CortexaDB.open(DB_PATH, dimension=3) as db_ctx:
+        assert len(db_ctx) == 2
+
+
+def test_cortexadb_error_handling():
+    db = CortexaDB.open(DB_PATH, dimension=3)
+
+    # Wrong dimension map
+    with pytest.raises(CortexaDBError, match="embedding dimension mismatch"):
+        db.add("Wrong dim", embedding=[1.0, 0.0])
+        
+    # Missing embedding required
+    with pytest.raises(CortexaDBError, match="No embedder"):
+        db.add("No embedding")
+
+    # Wrong dimension on open — the mismatch check uses in-memory stats (entries > 0)
+    # so no checkpoint is required.
+    mid = db.add("Seed", embedding=[1.0, 0.0, 0.0])
+    with pytest.raises(CortexaDBError, match="(?i)dimension mismatch"):
+        CortexaDB.open(DB_PATH, dimension=4)
+
+# Chunker
+def test_chunk_text_basic():
+    text = "Hello world foo bar baz " * 40   # ~1000 chars
+    chunks = chunk_text(text, chunk_size=200, overlap=20)
+    assert len(chunks) > 1
+    for c in chunks:
+        assert len(c) <= 200
+
+def test_chunk_text_empty():
+    assert chunk_text("") == []
+    assert chunk_text("   ") == []
+
+def test_chunk_text_single_chunk():
+    """Short text fits in one chunk."""
+    chunks = chunk_text("Short sentence.", chunk_size=512, overlap=50)
+    assert len(chunks) == 1
+    assert chunks[0] == "Short sentence."
+
+
+# HashEmbedder + auto-embed
+def test_hash_embedder_basic():
+    emb = HashEmbedder(dimension=16)
+    assert emb.dimension == 16
+    vec = emb.embed("hello")
+    assert len(vec) == 16
+    # L2 norm should be ≈ 1
+    norm = sum(v * v for v in vec) ** 0.5
+    assert abs(norm - 1.0) < 1e-5
+
+def test_hash_embedder_deterministic():
+    emb = HashEmbedder(dimension=32)
+    assert emb.embed("same") == emb.embed("same")
+    assert emb.embed("a") != emb.embed("b")
+
+def test_open_with_embedder():
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+    # add without explicit embedding
+    mid = db.add("Auto-embedded text")
+    assert mid > 0
+    hits = db.search("Auto-embedded text")
+    assert len(hits) >= 1
+
+def test_open_requires_one_of_dimension_or_embedder():
+    with pytest.raises(CortexaDBError, match="required"):
+        CortexaDB.open(DB_PATH)  # neither
+
+    with pytest.raises(CortexaDBError, match="not both"):
+        CortexaDB.open(DB_PATH, dimension=16, embedder=HashEmbedder(16))
+
+def test_add_without_embedder_requires_embedding():
+    db = CortexaDB.open(DB_PATH, dimension=3)
+    with pytest.raises(CortexaDBError, match="No embedder"):
+        db.add("No embedding provided")
+
+def test_ingest():
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+    long_text = ("The quick brown fox jumps over the lazy dog. " * 30).strip()
+    ids = db.ingest(long_text, chunk_size=100, overlap=20)
+    assert len(ids) > 1
+    assert len(set(ids)) == len(ids)   # all IDs unique
+    assert db.stats().entries == len(ids)
+
+def test_ingest_requires_embedder():
+    db = CortexaDB.open(DB_PATH, dimension=16)
+    with pytest.raises(CortexaDBError, match="ingest"):
+        db.ingest("some text")
+
+def test_collection_auto_embed():
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+    col = db.collection("agent_a")
+    mid = col.add("I am agent A")
+    assert db.get(mid).collection == "agent_a"
+    hits = col.search("agent A")
+    assert any(h.id == mid for h in hits)
+
+# Namespace Model
+def test_collection_isolation():
+    """Memories in collection A should not appear in collection B results."""
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+
+    col_a = db.collection("agent_a")
+    col_b = db.collection("agent_b")
+
+    mid_a = col_a.add("I am agent A, secret info")
+    mid_b = col_b.add("I am agent B, different info")
+
+    hits_a = col_a.search("agent A", top_k=10)
+    hits_b = col_b.search("agent B", top_k=10)
+
+    a_ids = {h.id for h in hits_a}
+    b_ids = {h.id for h in hits_b}
+
+    assert mid_a in a_ids,  "Agent A memory not found in agent_a collection"
+    assert mid_b not in a_ids, "Agent B memory leaked into agent_a collection"
+    assert mid_b in b_ids,  "Agent B memory not found in agent_b collection"
+    assert mid_a not in b_ids, "Agent A memory leaked into agent_b collection"
+
+
+def test_collection_search_param():
+    """db.search(query, collections=[...]) should scope results correctly."""
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+
+    mid_a = db.add("Agent A private", collection="agent_a")
+    mid_b = db.add("Agent B private", collection="agent_b")
+    mid_s = db.add("Shared knowledge", collection="shared")
+
+    # Single collection via collections= param
+    hits = db.search("knowledge", collections=["shared"])
+    ids = {h.id for h in hits}
+    assert mid_s in ids
+    assert mid_a not in ids
+    assert mid_b not in ids
+
+
+def test_cross_collection_fan_out():
+    """collections=[a, b] should return merged re-ranked results from both."""
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+
+    mid_a = db.add("Agent A knowledge", collection="agent_a")
+    mid_s = db.add("Shared knowledge",  collection="shared")
+    db.add("Agent B only",              collection="agent_b")
+
+    hits = db.search("knowledge", collections=["agent_a", "shared"], top_k=10)
+    ids = {h.id for h in hits}
+
+    # Both agent_a and shared results must be present.
+    assert mid_a in ids
+    assert mid_s in ids
+
+
+def test_global_search_returns_all_collections():
+    """db.search(query) with no collections= should search globally."""
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+
+    mid_a = db.add("Agent A fact", collection="agent_a")
+    mid_b = db.add("Agent B fact", collection="agent_b")
+    mid_s = db.add("Shared fact",  collection="shared")
+
+    hits = db.search("fact", top_k=10)
+    ids = {h.id for h in hits}
+    assert mid_a in ids
+    assert mid_b in ids
+    assert mid_s in ids
+
+
+def test_readonly_collection():
+    """A readonly collection should allow search() but reject add()."""
+    emb = HashEmbedder(dimension=32)
+    db = CortexaDB.open(DB_PATH, embedder=emb)
+
+    # Write to shared normally.
+    mid = db.collection("shared").add("Public knowledge")
+
+    # Read from a readonly view.
+    ro = db.collection("shared", readonly=True)
+    hits = ro.search("Public knowledge")
+    assert any(h.id == mid for h in hits)
+
+    # Writes must be rejected.
+    with pytest.raises(CortexaDBError, match="read-only"):
+        ro.add("Trying to write")
+
+    with pytest.raises(CortexaDBError, match="read-only"):
+        ro.ingest("Document text")
+
+# Deterministic Replay
+import json
+from cortexadb import ReplayReader
+
+LOG_PATH  = "/tmp/cortexadb_replay_test.log"
+LOG_PATH2 = "/tmp/cortexadb_replay_test2.log"
+REPLAY_DB = "/tmp/cortexadb_replay_db"
+
+@pytest.fixture(autouse=False)
+def cleanup_replay():
+    for p in [LOG_PATH, LOG_PATH2, REPLAY_DB]:
+        if os.path.exists(p):
+            if os.path.isdir(p): shutil.rmtree(p)
+            else: os.remove(p)
+    yield
+    for p in [LOG_PATH, LOG_PATH2, REPLAY_DB]:
+        if os.path.exists(p):
+            if os.path.isdir(p): shutil.rmtree(p)
+            else: os.remove(p)
+
+
+def test_replay_recording_creates_ndjson(cleanup_replay):
+    """Recording mode should produce a valid NDJSON file."""
+    with CortexaDB.open(DB_PATH, dimension=3, record=LOG_PATH) as db:
+        db.add("First memory", embedding=[1.0, 0.0, 0.0])
+        db.add("Second memory", embedding=[0.0, 1.0, 0.0])
+
+    assert os.path.exists(LOG_PATH)
+    lines = open(LOG_PATH).read().strip().splitlines()
+
+    # First line is header.
+    header = json.loads(lines[0])
+    assert header["cortexadb_replay"] == "1.0"
+    assert header["dimension"] == 3
+
+    # 2 operation lines.
+    ops = [json.loads(l) for l in lines[1:]]
+    assert len(ops) == 2
+    assert all(op["op"] == "add" for op in ops)
+    assert ops[0]["text"] == "First memory"
+    assert len(ops[0]["embedding"]) == 3
+
+
+def test_replay_round_trip(cleanup_replay):
+    """Replaying a log into a new DB should recreate the same memories."""
+    with CortexaDB.open(DB_PATH, dimension=3, record=LOG_PATH) as db:
+        mid1 = db.add("Alpha", embedding=[1.0, 0.0, 0.0], collection="agent_a")
+        mid2 = db.add("Beta",  embedding=[0.0, 1.0, 0.0], collection="agent_b")
+
+    db2 = CortexaDB.replay(LOG_PATH, REPLAY_DB)
+
+    assert len(db2) == 2
+
+    hits = db2.search("query", embedding=[1.0, 0.0, 0.0], top_k=2)
+    texts = {db2.get(h.id).content.decode() if isinstance(db2.get(h.id).content, bytes) else db2.get(h.id).content for h in hits}
+    assert "Alpha" in texts
+    assert "Beta" in texts
+
+
+def test_replay_connect_id_mapping(cleanup_replay):
+    """connect() IDs in the log should be translated to new IDs on replay."""
+    with CortexaDB.open(DB_PATH, dimension=3, record=LOG_PATH) as db:
+        a = db.add("Node A", embedding=[1.0, 0.0, 0.0])
+        b = db.add("Node B", embedding=[0.0, 1.0, 0.0])
+        db.connect(a, b, "relates_to")
+
+    db2 = CortexaDB.replay(LOG_PATH, REPLAY_DB)
+    # Just assert the DB has 2 entries — connect is non-fatal if it fails.
+    assert len(db2) == 2
+
+
+def test_replay_collection_preserved(cleanup_replay):
+    """Replay should preserve original collections."""
+    with CortexaDB.open(DB_PATH, dimension=3, record=LOG_PATH) as db:
+        db.add("In A", embedding=[1.0, 0.0, 0.0], collection="agent_a")
+        db.add("In B", embedding=[0.0, 1.0, 0.0], collection="agent_b")
+
+    db2 = CortexaDB.replay(LOG_PATH, REPLAY_DB)
+
+    hits_a = db2.search("query", embedding=[1.0, 0.0, 0.0], collections=["agent_a"])
+    hits_b = db2.search("query", embedding=[0.0, 1.0, 0.0], collections=["agent_b"])
+
+    assert len(hits_a) == 1
+    assert len(hits_b) == 1
+    def to_str(c): return c.decode() if isinstance(c, bytes) else c
+    assert to_str(db2.get(hits_a[0].id).content) == "In A"
+    assert to_str(db2.get(hits_b[0].id).content) == "In B"
+
+
+def test_replay_invalid_log_raises(cleanup_replay):
+    """Replaying a non-existent file should raise CortexaDBError."""
+    with pytest.raises(CortexaDBError):
+        CortexaDB.replay("/tmp/no_such_file.log", REPLAY_DB)
+
+
+def test_replay_reader_header():
+    """ReplayReader should parse the header correctly."""
+    with CortexaDB.open(DB_PATH, dimension=4, record=LOG_PATH) as db:
+        db.add("test", embedding=[1.0, 0.0, 0.0, 0.0])
+
+    reader = ReplayReader(LOG_PATH)
+    assert reader.header.dimension == 4
+    assert reader.header.version == "1.0"
+    assert reader.header.sync == "strict"
+
+    ops = list(reader.operations())
+    assert len(ops) == 1
+    assert ops[0]["op"] == "add"
+
+    # Cleanup
+    os.remove(LOG_PATH)
+
+
+def test_replay_non_strict_unknown_op_reports_skip(cleanup_replay):
+    with open(LOG_PATH, "w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "cortexadb_replay": "1.0",
+                    "dimension": 3,
+                    "sync": "strict",
+                    "recorded_at": "2026-03-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+        f.write(json.dumps({"op": "unknown_op", "foo": "bar"}) + "\n")
+
+    db = CortexaDB.replay(LOG_PATH, REPLAY_DB, strict=False)
+    assert len(db) == 0
+    report = db.last_replay_report
+    assert report is not None
+    assert report["skipped"] == 1
+    assert report["failed"] == 0
+    assert report["op_counts"]["unknown"] == 1
+
+
+def test_replay_strict_unknown_op_raises(cleanup_replay):
+    with open(LOG_PATH, "w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "cortexadb_replay": "1.0",
+                    "dimension": 3,
+                    "sync": "strict",
+                    "recorded_at": "2026-03-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+        f.write(json.dumps({"op": "unknown_op", "foo": "bar"}) + "\n")
+
+    with pytest.raises(CortexaDBError, match="unknown replay op"):
+        CortexaDB.replay(LOG_PATH, REPLAY_DB, strict=True)
+
+
+def test_replay_non_strict_malformed_add_skips(cleanup_replay):
+    with open(LOG_PATH, "w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "cortexadb_replay": "1.0",
+                    "dimension": 3,
+                    "sync": "strict",
+                    "recorded_at": "2026-03-01T00:00:00Z",
+                }
+            )
+            + "\n"
+        )
+        # Missing required `embedding`.
+        f.write(json.dumps({"op": "add", "text": "bad add"}) + "\n")
+
+    db = CortexaDB.replay(LOG_PATH, REPLAY_DB, strict=False)
+    report = db.last_replay_report
+    assert report is not None
+    assert report["op_counts"]["add"] == 1
+    assert report["skipped"] == 1
+    assert len(db) == 0
+
+
+def test_export_replay_sets_report(cleanup_replay):
+    db = CortexaDB.open(DB_PATH, dimension=3)
+    db.add("One", embedding=[1.0, 0.0, 0.0])
+    db.add("Two", embedding=[0.0, 1.0, 0.0])
+
+    db.export_replay(LOG_PATH)
+    report = db.last_export_replay_report
+    assert report is not None
+    assert (report["exported"] + report["skipped_missing_embedding"]) >= 2
+    assert report["checked"] >= report["exported"]
+
+def test_hybrid_use_graph():
+    import cortexadb
+    db = cortexadb.CortexaDB.open(DB_PATH, dimension=2, sync="strict")
+    id1 = db.add("Node A", embedding=[1.0, 0.0])
+    id2 = db.add("Node B", embedding=[0.0, 1.0])  # Orthogonal
+    db.connect(id1, id2, "links_to")
+
+    # Vector only: expects id1 with high score, id2 with score ~0
+    hits_normal = db.search("test", embedding=[1.0, 0.0], top_k=2)
+    assert hits_normal[0].id == id1
+    assert hits_normal[1].id == id2
+    assert hits_normal[0].score > 0.9
+    assert hits_normal[1].score <= 0.501
+
+    # Graph mixed query: id2 gets pulled up via id1's edge (score * 0.9)
+    hits_graph = db.search("test", embedding=[1.0, 0.0], top_k=2, use_graph=True)
+    assert hits_graph[0].id == id1
+    assert hits_graph[1].id == id2
+    # The score of id2 should be updated because of graph neighbor logic
+    assert hits_graph[1].score >= hits_normal[0].score * 0.89
+
+
+def test_hybrid_use_graph_respects_collections(monkeypatch):
+    import cortexadb
+
+    db = cortexadb.CortexaDB.open(DB_PATH, dimension=2, sync="strict")
+    id_a = db.add("Node A", embedding=[1.0, 0.0], collection="agent_a")
+    id_b = db.add("Node B", embedding=[0.0, 1.0], collection="agent_b")
+
+    def fake_get_neighbors(_mid):
+        # Simulate an unexpected backend neighbor response across collections.
+        return [(id_b, "forced")]
+
+    monkeypatch.setattr(type(db._inner), "get_neighbors", lambda self, mid: fake_get_neighbors(mid))
+
+    scoped_hits = db.search(
+        "test",
+        embedding=[1.0, 0.0],
+        top_k=5,
+        collections=["agent_a"],
+        use_graph=True,
+    )
+    scoped_ids = {h.id for h in scoped_hits}
+    assert id_a in scoped_ids
+    assert id_b not in scoped_ids
+
+def test_hybrid_recency_bias():
+    import cortexadb
+    db = cortexadb.CortexaDB.open(DB_PATH, dimension=2, sync="strict")
+    id1 = db.add("Node A", embedding=[1.0, 0.0])
+
+    hits_normal = db.search("test", embedding=[1.0, 0.0], top_k=1)
+    hits_recent = db.search("test", embedding=[1.0, 0.0], top_k=1, recency_bias=True)
+
+    # With exactly 0 delay, the boost is exactly 1.2x.
+    assert hits_recent[0].score > hits_normal[0].score
+    assert abs(hits_recent[0].score - (hits_normal[0].score * 1.2)) < 0.05
+
+def test_capacity_max_entries(tmp_path):
+    import cortexadb
+    db_path = str(tmp_path / "capacity_test")
+    db = cortexadb.CortexaDB.open(db_path, dimension=2, sync="strict", max_entries=5)
+
+    # Insert 8 memories.
+    for i in range(8):
+        db.add(f"Content {i}", embedding=[1.0, 0.0])
+
+    # Should evict the oldest 3.
+    stats = db.stats()
+    assert stats.entries == 5
+    assert stats.indexed_embeddings == 5
+
+    # Reopen to verify eviction persisted
+    db = cortexadb.CortexaDB.open(db_path, dimension=2, sync="strict")
+    stats = db.stats()
+    assert stats.entries == 5
+    assert stats.indexed_embeddings == 5

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/cortexadb-core",
+    "crates/cortexadb-py",
+]
+resolver = "2"

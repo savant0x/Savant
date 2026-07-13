@@ -1,0 +1,77 @@
+[package]
+name = "savant_agent"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[features]
+nexus = []
+
+[dependencies]
+savant_core = { workspace = true }
+savant_skills = { workspace = true }
+savant_mcp = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+savant_ipc = { workspace = true }
+savant_cognitive = { workspace = true }
+savant_memory = { workspace = true }
+savant_security = { workspace = true }
+savant_echo = { workspace = true }
+savant_gateway = { workspace = true }
+savant_dream = { workspace = true }
+savant_browser = { workspace = true }
+savant_canvas = { workspace = true }
+savant_toolforge = { workspace = true }
+ savant_obsidian = { workspace = true }
+savant_panopticon = { workspace = true }
+savant_sandbox = { workspace = true }
+savant_integrations = { workspace = true }
+savant_generation = { workspace = true }
+savant_schema = { path = "../schema" }
+base64 = "0.22"
+once_cell = "1.19"
+ aho-corasick = "1.1"
+ tokio = { workspace = true }
+ tokio-util = { workspace = true }
+ zstd = "0.13"
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+serde_yaml = "0.9.34"
+ rkyv = { workspace = true }
+tiktoken-rs = "0.6"
+regex = "1.10"
+reqwest = { workspace = true }
+scraper = "0.21"
+futures = { workspace = true }
+tracing = { workspace = true }
+async-trait = "0.1"
+async-stream = "0.3"
+bytes = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+dashmap = { workspace = true }
+rand = { workspace = true }
+rusqlite = { version = "0.38.0", features = ["chrono"] }
+notify = "8.2.0"
+notify-debouncer-mini = "0.6.0"
+ed25519-dalek = { version = "2.2", features = ["rand_core"] }
+sha2 = "0.10"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+anyhow = "1.0"
+thiserror = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+pqcrypto-dilithium = "0.5"
+pqcrypto-traits = "0.3"
+sysinfo = "0.33"
+lsp-types = "0.97.0"
+url = "2"
+tree-sitter = "0.26"
+tree-sitter-bash = "0.25"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3.10"

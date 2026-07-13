@@ -1,0 +1,31 @@
+{
+    "id": "docker/logs",
+    "family": "Infrastructure",
+    "description": "Compress docker logs output. Deduplicate repeated lines, preserve errors.",
+    "match_criteria": {
+        "tool_names": ["docker"],
+        "argv_includes": ["logs"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$"
+        ],
+        "keep_patterns": [
+            "^(ERROR|Error|error|ERR|err|FATAL|Fatal|fatal)",
+            "^(WARN|Warn|warn)"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": true
+    },
+    "summarize": {
+        "head_lines": 30,
+        "tail_lines": 50,
+        "max_chars": 8000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 5,
+    "output_hint": "text"
+}

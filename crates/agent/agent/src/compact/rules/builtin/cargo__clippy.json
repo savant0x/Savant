@@ -1,0 +1,49 @@
+{
+    "id": "cargo/clippy",
+    "family": "Build",
+    "description": "Compress cargo clippy output. Discard compilation progress, preserve warnings and errors.",
+    "match_criteria": {
+        "tool_names": ["cargo"],
+        "argv_includes": ["clippy"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^$",
+            "^   Compiling ",
+            "^    Checking ",
+            "^     Running ",
+            "^   Downloading ",
+            "^   Fetched ",
+            "^   Locking "
+        ],
+        "keep_patterns": [
+            "^warning:",
+            "^error",
+            "^  --> ",
+            "  help:",
+            "  note:",
+            "= note:",
+            "= help:",
+            "Generated ",
+            "warning.*generated"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "dedupe_adjacent_lines": true
+    },
+    "summarize": {
+        "head_lines": 10,
+        "tail_lines": 30,
+        "max_chars": 8000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 3,
+    "output_hint": "text",
+    "counters": {
+        "warnings": "^warning",
+        "errors": "^error",
+        "clippy_warnings": "warning:.*generated"
+    }
+}

@@ -8,7 +8,7 @@
 project:
   name: "savant"
   description: "Next.js 15 + React 19 + HeroUI v3 alpha renderer over a Rust (Tauri 2) daemon — proactive AI assistant. Renderer-first rebuild; Rust core not yet built. Phase 1 in flight."
-  version: "0.0.3"
+  version: "0.0.4"
   license: "Apache-2.0"
 
 protocol:

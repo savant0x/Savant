@@ -3,7 +3,7 @@
   "description": "Savant AI desktop shell (Renderer-first rebuild, Rust core pending)",
   "license": "Apache-2.0",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
@@ -24,7 +24,9 @@
     "@tauri-apps/api": "^2.4.0",
     "next": "^15.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

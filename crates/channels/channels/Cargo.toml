@@ -1,0 +1,36 @@
+[package]
+name = "savant_channels"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+savant_core = { path = "../core" }
+teloxide = "0.12"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+bb8 = "0.8"
+futures = { workspace = true }
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
+dashmap = "6.0"
+lru = "0.12"
+reqwest = { workspace = true }
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.6", default-features = false, features = ["runtime-tokio"] }
+native-tls = "0.2"
+lettre = { version = "0.11", features = ["smtp-transport", "native-tls", "builder"] }
+mailparse = "0.14"
+tokio-rustls = "0.26"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "0.26"
+chrono = "0.4"
+tokio-tungstenite = { version = "0.26", features = ["connect", "stream"] }
+tokio-native-tls = "0.3"
+nostr-sdk = "0.44"
+tokio-util = "0.7"
+
+[lints]
+workspace = true

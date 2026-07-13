@@ -424,3 +424,82 @@ export async function manifestSoulStream(
     _channel: channel,
   } as unknown as Record<string, unknown>);
 }
+
+// ─────────────────────────────────────────────────────────────────
+// FID-017 — Inner monologue IPC wrappers
+//
+// Mirrors the savant-orig `crates/agent/src/{pulse,consciousness,learning}/`
+// surfaces through Tauri commands. The 12-lens rotation is pulled from
+// `savant_agent::pulse::prompts::LENSES` on the Rust side; this is just
+// the bridge.
+// ─────────────────────────────────────────────────────────────────
+
+export type ConsciousnessState =
+  | "THINKING"
+  | "IDLE"
+  | "DORMANT"
+  | "WONDERING"
+  | "UNKNOWN";
+
+/**
+ * FID-017 — Confirm the AppState is reachable. No-op in Tauri runtime
+ * (AppState is initialized in the Tauri `setup()` callback); useful as
+ * a renderer-side smoke test to verify the IPC bridge is wired.
+ */
+export async function initializeAppState(workspacePath: string): Promise<void> {
+  return invoke<void>("initialize_app_state", { workspacePath });
+}
+
+/**
+ * FID-017 — Start the consciousness daemon in a background Tokio task.
+ * Returns the initial state ("THINKING"). The daemon cycles through
+ * THINKING/IDLE/DORMANT/WONDERING every 5s; full LLM-driven synthesis
+ * comes in FID-018+ (this MVP proves the lifecycle works).
+ */
+export async function startConsciousness(): Promise<ConsciousnessState> {
+  return invoke<ConsciousnessState>("start_consciousness");
+}
+
+/**
+ * FID-017 — Stop the consciousness daemon. Triggers the
+ * CancellationToken and awaits the JoinHandle.
+ */
+export async function stopConsciousness(): Promise<void> {
+  return invoke<void>("stop_consciousness");
+}
+
+/**
+ * FID-017 — Read the current consciousness state (raw AtomicU8 from
+ * the daemon's state handle, decoded to the human-readable enum).
+ */
+export async function getConsciousnessState(): Promise<ConsciousnessState> {
+  return invoke<ConsciousnessState>("get_consciousness_state");
+}
+
+/**
+ * FID-017 — Trigger a single reflection. Picks the next lens from the
+ * 19-entry rotation (or honors `lensOverride`), calls OpenRouter with
+ * the model the user selected in Settings, and appends the result to
+ * `workspace-savant/REFLECTIONS.md`.
+ *
+ * The `model` arg is REQUIRED in the sense that the caller MUST pass
+ * the model the user picked via Settings (`useLoadedConfig().modelId`).
+ * We do not hardcode a default model — the entire point of the
+ * Settings page is that the user selects which model to run. If the
+ * caller passes `null`/`undefined`, the mock will surface a clear
+ * "no model configured" error pointing the user to Settings rather
+ * than silently picking a different model.
+ *
+ * Returns the new narrative body. The full REFLECTIONS.md entry
+ * (header + body) is in the file; this return value is just the body
+ * for UI display.
+ */
+export async function triggerReflection(
+  lensOverride?: string,
+  model?: string,
+): Promise<string> {
+  return invoke<string>("trigger_reflection", {
+    lensOverride: lensOverride ?? null,
+    model: model ?? null,
+  });
+}

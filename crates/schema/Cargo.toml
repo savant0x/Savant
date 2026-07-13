@@ -1,0 +1,29 @@
+[package]
+name = "savant_schema"
+version.workspace = true
+edition = "2021"
+description = "Code intelligence — AST parsing, symbol extraction, call graph, FTS5 search"
+
+[dependencies]
+# Core
+savant_core = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+# Tree-sitter
+tree-sitter = "0.26"
+tree-sitter-rust = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+
+# Storage
+rusqlite = { version = "0.38.0", features = ["bundled"] }
+
+# File watching
+notify = "7"
+
+# Path utilities
+walkdir = "2"

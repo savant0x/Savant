@@ -1,0 +1,29 @@
+{
+    "id": "system/ps",
+    "family": "System",
+    "description": "Compress ps output. Strip header, preserve PIDs and command names.",
+    "match_criteria": {
+        "tool_names": ["ps"],
+        "argv0": ["ps"]
+    },
+    "filters": {
+        "skip_patterns": [
+            "^  PID ",
+            "^$",
+            "^\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+"
+        ]
+    },
+    "transforms": {
+        "strip_ansi": true,
+        "trim_empty_edges": true,
+        "normalize_whitespace": true
+    },
+    "summarize": {
+        "head_lines": 30,
+        "tail_lines": 5,
+        "max_chars": 3000
+    },
+    "failure_mode": "preserve_raw",
+    "budget_ms": 2,
+    "output_hint": "text"
+}
