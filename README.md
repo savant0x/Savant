@@ -183,13 +183,13 @@ Savant/
 
 ### Rust Module Map
 
-| Module | Status | Purpose |
-| :--- | :---: | :--- |
-| `src-tauri/src/security/` | LIVE (v0.0.3) | Generalized multi-profile `Vault` (5-strategy cascade: env vars → cwd `.env` → exe `.env` → JSON vault → UI prompt) |
-| `src-tauri/src/inference/` | LIVE (v0.0.3) | `openrouter` provider client (reqwest chat-completions, reads `openrouter-default` profile) |
-| `src-tauri/src/trigger/` | PLANNED (v0.1.0) | Trigger bus + hybrid tick scheduler |
-| `src-tauri/src/state/` | PLANNED (v0.1.0) | SQLite WAL durable state |
-| `src-tauri/src/cognitive/` | PLANNED (v0.3.0) | Dual-loop cognitive engine (fast loop + slow reflection) |
+| Module                     |      Status      | Purpose                                                                                                             |
+| :------------------------- | :--------------: | :------------------------------------------------------------------------------------------------------------------ |
+| `src-tauri/src/security/`  |  LIVE (v0.0.3)   | Generalized multi-profile `Vault` (5-strategy cascade: env vars → cwd `.env` → exe `.env` → JSON vault → UI prompt) |
+| `src-tauri/src/inference/` |  LIVE (v0.0.3)   | `openrouter` provider client (reqwest chat-completions, reads `openrouter-default` profile)                         |
+| `src-tauri/src/trigger/`   | PLANNED (v0.1.0) | Trigger bus + hybrid tick scheduler                                                                                 |
+| `src-tauri/src/state/`     | PLANNED (v0.1.0) | SQLite WAL durable state                                                                                            |
+| `src-tauri/src/cognitive/` | PLANNED (v0.3.0) | Dual-loop cognitive engine (fast loop + slow reflection)                                                            |
 
 ---
 
@@ -215,18 +215,18 @@ cargo check --workspace    # Rust type-check
 
 ## Roadmap
 
-| Version | Phase | Status | Focus |
-| :--- | :---: | :--- | :--- |
-| v0.0.1  | 1 | SHIPPED | Tauri 2 shell + master-key vault + OpenRouter smoke-test |
-| v0.0.2  | 1 | SHIPPED | Auto-derived session key (FID-0003) + two-tier credential architecture + vitest/Playwright test framework |
-| v0.0.3  | 1 | **NOW** | Soul Builder (FID-006 v3) + LLM streaming (FID-010) + swarm diff (FID-013) + Perfection Loop (FID-009) + env key security + dev server fixes |
-| v0.0.4  | 1 | NEXT | First Apache 2.0 release; (in flight) Quality Loop + early swarm plumbing |
-| v0.0.10 | 1 | PLANNED | Phase 1 stabilization (before minor bump) |
-| v0.1.0  | 2 | PLANNED | Trigger bus + hybrid tick + SQLite WAL durable state + dual-loop init + Rust module split (trigger/, state/, cognitive/) |
-| v0.1.10 | 2 | PLANNED | Phase 2 stabilization (before minor bump) |
-| v0.2.0  | 3 | PLANNED | Tiered inference (fast loop + slow reflection) + observability + 16-provider chain |
-| v0.3.0  | 4 | PLANNED | Mandatory Security Scanner + Two-Tier Agent System + Distributed Memory Substrate + Glass House (Obsidian sync) + Channels (Discord, Telegram, WhatsApp, etc.) |
-| v0.4.0  | 5 | PLANNED | Full UI shell (multi-pane dashboard + agent observability) + MCP integration + Windows DPAPI hardening + release signing + auto-update |
+| Version | Phase | Status  | Focus                                                                                                                                                          |
+| :------ | :---: | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.0.1  |   1   | SHIPPED | Tauri 2 shell + master-key vault + OpenRouter smoke-test                                                                                                       |
+| v0.0.2  |   1   | SHIPPED | Auto-derived session key (FID-0003) + two-tier credential architecture + vitest/Playwright test framework                                                      |
+| v0.0.3  |   1   | **NOW** | Soul Builder (FID-006 v3) + LLM streaming (FID-010) + swarm diff (FID-013) + Perfection Loop (FID-009) + env key security + dev server fixes                   |
+| v0.0.4  |   1   | NEXT    | First Apache 2.0 release; (in flight) Quality Loop + early swarm plumbing                                                                                      |
+| v0.0.10 |   1   | PLANNED | Phase 1 stabilization (before minor bump)                                                                                                                      |
+| v0.1.0  |   2   | PLANNED | Trigger bus + hybrid tick + SQLite WAL durable state + dual-loop init + Rust module split (trigger/, state/, cognitive/)                                       |
+| v0.1.10 |   2   | PLANNED | Phase 2 stabilization (before minor bump)                                                                                                                      |
+| v0.2.0  |   3   | PLANNED | Tiered inference (fast loop + slow reflection) + observability + 16-provider chain                                                                             |
+| v0.3.0  |   4   | PLANNED | Mandatory Security Scanner + Two-Tier Agent System + Distributed Memory Substrate + Glass House (Obsidian sync) + Channels (Discord, Telegram, WhatsApp, etc.) |
+| v0.4.0  |   5   | PLANNED | Full UI shell (multi-pane dashboard + agent observability) + MCP integration + Windows DPAPI hardening + release signing + auto-update                         |
 
 Each phase lives as a FID under `dev/fids/` as it ships.
 
