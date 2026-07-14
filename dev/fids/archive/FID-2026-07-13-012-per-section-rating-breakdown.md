@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 **Author:** Spencer + Buffy (FID-006 v3 polish, item (b))
-**Status:** Closed (perfection loop complete, 2026-07-13)
+**Status:** closed
 **Perfection Loop:** Completed 2026-07-13. Test coverage added at `src/lib/manifest-mock.test.ts` (covers `computeSectionMetrics` edge cases: empty content, single section, canonical 18 sections, loose regex variants for LLM output, placeholders, short sections, density rounding). 68/68 vitest tests passing.
 
 ---

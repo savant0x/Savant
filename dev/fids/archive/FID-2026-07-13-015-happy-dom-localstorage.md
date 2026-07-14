@@ -3,7 +3,7 @@
 **Filename:** `FID-2026-07-13-015-happy-dom-localstorage.md`
 **ID:** FID-2026-07-13-015
 **Severity:** low
-**Status:** Closed (2026-07-13)
+**Status:** closed
 **Created:** 2026-07-13
 **Author:** Vera (ECHO Protocol, codebuff/minimax-m3 in Freebuff harness)
 **Supersedes:** *(none)*

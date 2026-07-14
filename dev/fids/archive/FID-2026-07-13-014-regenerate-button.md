@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 **Author:** Spencer + Buffy (FID-006 v3 polish, item (d))
-**Status:** Closed (perfection loop complete, 2026-07-13)
+**Status:** closed
 **Perfection Loop:** Completed 2026-07-13. No unit tests added (the `regenPending` useEffect + capture-then-reset pattern lives in `src/app/manifest/page.tsx` and would require React Testing Library to test in isolation; deferred per code-reviewer verdict in FID-009). The pattern was verified through 5 code-reviewer-minimax-m3 passes + manual smoke test per the FID-014 body. 68/68 vitest tests passing across the other 6 FIDs.
 
 ---

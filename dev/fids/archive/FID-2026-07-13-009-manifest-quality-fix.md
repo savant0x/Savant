@@ -144,4 +144,4 @@ The 4-space-indented code block test was removed because the write_file tool str
 - `npm test` — 68 tests passed, 0 failed (excluding the pre-existing `ipc.test.ts` localStorage issue, which is out of scope for FID-009)
 - `code-reviewer-minimax-m3` — APPROVED on all 9 review rounds
 
-**Status: Closed (perfection loop complete).**
+**Status: closed**

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 **Author:** Spencer + Buffy (FID-006 v3 polish, item (a))
-**Status:** Closed (perfection loop complete, 2026-07-13)
+**Status:** closed
 **Phase 2 Tauri migration:** See §Phase 2 Tauri migration below
 **Perfection Loop:** Completed 2026-07-13. `parseSSEStream` exported from `src/lib/manifest-mock.ts` for testability. Test coverage added at `src/lib/manifest-mock.test.ts` (TCP fragmentation, [DONE] sentinel, malformed chunks, abort, single/multiple events). 68/68 vitest tests passing.
 

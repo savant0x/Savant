@@ -61,7 +61,7 @@
 
 - **LESSON-026 str_replace multi-line phrase-split bug + SPACE-vs-HYPHEN-MINUS byte-level anti-pattern** — *Codified 2026-07-13 after 8+ str_replace retries + 2 Python heredoc attempts + 1 raw-bytes debug script all failed on a single CHANGELOG.md anchor.* The cascade-ordering doc-consolidation exercise surfaced TWO related tool-fragility patterns. **(1) SPACE-vs-HYPHEN-MINUS byte-level discrimination failures**: when authoring an oldString for a multi-line block that contains a 5-7 word paragraph followed by a punctuation separator (a space or a hyphen), a single-byte hypothesis error at the prefix position causes the entire substring match to fail. Symptom: 8+ str_replace retries all report "old string not found" while the file's content is provably on disk. **Diagnostic pattern**: when str_replace + Python regex + Python raw-bytes ALL agree (via `count() == 0` and `raw.find() == -1`) that a string is NOT in the file, but a separate grep-like tool (or human eye on `od -c`) clearly shows the string IS in the file, the anchor has a byte-level discrepancy. **Workaround**: write a Python script that reads the affected line range in binary mode + dumps the exact byte sequence with `repr()` + per-byte hex+ascii view; match against the oldString byte-by-byte; identify the mismatched byte (40-60% of the time it's space-vs-hyphen at a word-boundary); substitute the correct byte in the oldString. **Prevention**: when authoring multi-line oldStrings, NEVER trust word-processor-style "looks like" matching — use `repr()` from the actual file content as the source of truth for the anchor. **(2) Phrase-across-line-breaks str_replace substring-match invariant failure**: when the canonical phrase is split across 2 lines (e.g., `"Precedence & \` ` on line C + `\` ` `.env` ` loading"` paragraph `...` on line D), substring-mode `git grep -c` WILL NOT match unless the phrase is first normalized. Symptom: forward-pointer text appears semantically correct, but `git grep -c '<canonical phrase>'` reports N-1 hits instead of N. **Diagnostic pattern**: per-line substring-match diagnostic — for each line containing the START of the canonical phrase, check whether the END of the canonical phrase is on the SAME line; if not, the phrase is split. **Workaround**: `str_replace` merging L234-235-style multi-line text into a single line. **Prevention**: when authoring forward-pointers, write the entire canonical phrase on a single line. If the line exceeds typical line-length limits (80-120 chars), split at sentence boundaries but NEVER within the canonical phrase itself. Both patterns cost 30+ minutes of debugging per incident; codifying now prevents future regressions.
 
-- **LESSON-027 Doc-drift substring-match invariant design** — With 1 canonical + N forward-pointers all using the EXACT canonical phrase as their anchor, `git grep -c '<canonical phrase>'` becomes the doc-drift linter's invariant. If a future agent adds a 7th forward-pointer site and forgets to use the exact phrase, the grep count drops to 6 → drift detector fires. **This is a high-leverage pattern**: drift becomes a substring-match problem instead of a content-equivalence problem. The 6-anchor invariant is documented as FID-021's primary success criterion. **Companion tooling**: a `pnpm lint:docs` script (post-FID-021 future work) that runs `git grep -c 'Precedence & \`` `.env` ` loading'` and fails CI if the count != 6; would catch forward-pointer drift at commit time vs. at quarterly code review time.
+- **LESSON-027 Doc-drift substring-match invariant design** — With 1 canonical + N forward-pointers all using the EXACT canonical phrase as their anchor, `git grep -c 'canonical phrase'` becomes the doc-drift linter's invariant. If a future agent adds a 7th forward-pointer site and forgets to use the exact phrase, the grep count drops to 6 → drift detector fires. **This is a high-leverage pattern**: drift becomes a substring-match problem instead of a content-equivalence problem. The 6-anchor invariant is documented as FID-021's primary success criterion. **Companion tooling**: a `pnpm lint:docs` script (post-FID-021 future work) that runs `git grep -c 'Precedence & \`` `.env` ` loading'` and fails CI if the count != 6; would catch forward-pointer drift at commit time vs. at quarterly code review time.
 
 **Agent Behavior:**
 
@@ -101,5 +101,58 @@
 - **`release.py`'s clean-tree pre-flight check is local-only (`git status --porcelain`)** — the script's philosophy is "tag is local-first; push is a separate concern" (per the prior v0.0.4 force-with-lease recovery). Consequence: when the script fails on a temp file, the user must clean up before retrying. The `pre-release-check.sh` companion tooling (1h work) would close this gap by running the clean-tree + uncommitted-temp-file + tag-pushed checks (3 gates) before invoking `release.py`.
 - **`git commit -F <file>` + `git tag -F <file>` is the canonical pattern for complex commit + tag messages** — the `write_file` tool handles all character escaping correctly (backticks, em-dashes, multi-byte UTF-8, etc.), while the basher's bash shell can mangle them in the multi-`-m` pattern. The temp file approach also makes the message content easier to review (one less quoting concern). The temp files must be cleaned up before `release.py` is run (per LESSON-029).
 - **The v0.0.5 release cut's 2 verifier false positives are both instances of LESSON-028's broad-anchor anti-pattern** — the `protocol.config.yaml` 2nd `version:` field is the ECHO Protocol schema version (a distinct axis from `project.version`); the `crates/skills/*/src/security.rs` 2 `savant-core` references are intentional test fixtures for the security scanner's fake-prerequisite detector (a Snyk-style attack pattern). Both are false positives caused by the broad-substring verifier anchors. A field-specific anchor (`grep -E '^project\.version:'` instead of `grep -E '^\s*version:'`) would have caught only the `project.version` field, eliminating both false positives.
+
+### LESSON-038: No Auto-Defer Without Spencer's Explicit Approval
+
+**Date:** 2026-07-14
+**Trigger:** Spencer's session rule 2026-07-14: "We NEVER defer something without my clear approval."
+
+**Lesson:** Agents must NEVER mark a FID as `deferred` (or annotation-equivalent: `impl deferred until X`, `impl-sub-package of Y`, etc.) without Spencer's explicit approval for THAT specific FID's deferral.
+
+**Permitted uses (no extension required):**
+- Annotating Spencer's VERBATIM quotes about deferral policy (no extension, just documentation): ✓
+- Codifying the user-explicit deferral DIRECTLY in `Resolution:` section: ✓
+- WHEN Spencer EXPLICITLY asks for a defer-decision tracker file, aggregating fid-level defer status into that file: ✓
+
+**Not permitted:**
+- Agent inferring that "release cut gate" implies "FID-X impl is deferred": ✗
+- Agent extending doc-only push-defer to implementation-defer of the SAME FID: ✗
+- Agent unilaterally adding `deferred` annotations to OTHER FIDs based on a related FID's deferral: ✗
+
+**Enforcement + tooling:**
+- `coding-standards/release-workflow.md` §Auto-defer prohibition added 2026-07-14 codifies the rule on the documentation side as the standing rule
+- A future FID-XXX could write a `scripts/lint-defer.sh` static checker that flags any FID body containing the phrase "deferred" without an adjacent user-quote citation (per LESSON-031 re-grep pattern)
+
+**Cross-references:** Spencer's session quote 2026-07-14; FID-024 + FID-025 reverting edits (2026-07-14); the new §Auto-defer prohibition section in `coding-standards/release-workflow.md`.
+
+---
+
+### LESSON-049: Per-FID Convention — Top-Level `## Verifier Pass` + `## Questions You Should've Asked` Template
+
+**Date:** 2026-07-14
+**Trigger:** Spencer's directive 2026-07-14: 'Codify the new ## Verifier Pass convention + ## Questions You Should've Asked template as a NEW LESSON + update `templates/FID-TEMPLATE.md` to add '## Verifier Pass' as a sibling section + add the ## Questions You Should've Asked template.'
+
+**Lesson:** Two FID-doc conventions have high-leverage standardization value + should be enforced as cross-FID patterns going forward:
+
+**(1) Top-level `## Verifier Pass` is the canonical meta-review space.** The §Perfection Loop section in FID-TEMPLATE represents impl-iterations (RED → GREEN → AUDIT on CODE changes). Meta-review (e.g., FID-doc perfection-loop completeness check + convention-harmonization pass + gap-survey) belongs in a separate `## Verifier Pass (...)` TOP-LEVEL section, NOT as a `### Loop N (Verifier Pass ...)` sub-section inside `## Perfection Loop`. **Anti-pattern:** Sub-sectioning verifier-pass content under `## Perfection Loop` confuses the reader about what is impl-iteration vs meta-review; future contributors lose the impl-vs-meta distinction. **Pattern:** `## Verifier Pass (YYYY-MM-DD — meta-review description)` is a top-level sibling of `## Perfection Loop`; content shape follows RED (gaps surfaced) / GREEN (recommendations NOT applied) / AUDIT (verbatim invariants verified) / CHANGE DELTA (X% body rewrite), but the section's role is verification + recommendations, NOT code-iteration. Implementation sub-iterations (e.g., Kilo's `### Loop 1 (TypeScript fix)` in FID-027) STAY under `## Perfection Loop`; the same section header `### Loop N` does NOT shift between impl and meta contexts in the same FID body.
+
+**(2) `## Questions You Should've Asked` uses a 4-field structured template per item.** Each numbered item follows: `N. **Q:** [single-line question phrase]` + indent + `   - **Context:** [1-2 sentences, why this matters]` + `   - **Recommended:** [1 sentence, the action to take]` + `   - **Trade-off:** [1 sentence, the alternative cost]`. **Anti-pattern:** Open-prose items (one big paragraph per question) are unscannable + hard to diff against future agent replies + inconsistent across FIDs (FID-024 Q4 was 6 sentences; FID-023 Q1 was 2 sentences; the divergence hardens confusion). **Pattern:** Structured template + parallel field names + 1-2 sentences per field = easy scanning + easy cross-FID comparison + machine-parseable for future dashboard code that wants to surface "what questions did this FID need to answer?" as a structured artifact.
+
+**Cross-references:**
+- All 4 active FIDs (FID-023 + FID-024 + FID-026-fixture + FID-027) have been updated to use the new convention + template (2026-07-14)
+- `templates/FID-TEMPLATE.md` has been updated to include both `## Verifier Pass` (as sibling of `## Perfection Loop`) + `## Questions You Should've Asked` (as a new section after `## Lessons Learned`) (2026-07-14)
+- Pattern inventory established at the v0.0.6 release cut (FID-024 §Checkpoint Release Discipline pattern of clean conventions + LESSON-019 release-only-versioning discipline extends to FID-doc discipline)
+
+**Enforcement + tooling:**
+- Convention enforcement is by documentation (FID-TEMPLATE update) + cross-FID common practice. A future FID-XXX could write a `scripts/check-fid-conventions.sh` static checker that flags FIDs lacking `## Verifier Pass` (after a verifier pass) OR with sub-sectioned `### Loop N (Verifier Pass ...)` patterns + closed Q&A items with prose-form vs template-form divergence.
+
+**Anti-pattern remediation (2026-07-14):**
+- All 4 active FIDs had their verifier-pass sub-sections (`### Loop 1 (Verifier Pass ...)` / `### Loop 2 (Verifier Pass ...)`) promoted to top-level `## Verifier Pass (...)` sections.
+- All 4 active FIDs had their Q&A items restructured to the 4-field template (Q / Context / Recommended / Trade-off).
+- `templates/FID-TEMPLATE.md` was amended to include both new sections + explicit anti-pattern callouts + 4-field template example.
+
+**Future-FID authoring convention:** When authoring a new FID, do NOT sub-section verifier-pass content under §Perfection Loop; keep the impl-iteration + meta-review distinction explicit. When authoring Q&A items in a verifier-pass AUDIT or a future-FID review pass, use the 4-field template consistently.
+
+**Cross-references:** This lesson is the canonical reference for the convention; `templates/FID-TEMPLATE.md` is the canonical reference for the template skeleton.
 
 <!-- Add new entries above this line -->
