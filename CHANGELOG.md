@@ -135,7 +135,74 @@ provenance — closes the LESSON-025 forward-effective cross-link);
   2026-07-13 boilerplate separation note. ECHO `protocol.config.yaml`
   `project.license` field added for metadata symmetry.
 
+- **Vault extracted to `savant-vault` workspace crate (FID-019)** — Vault
+  extracted from `src-tauri/src/security/master_key.rs` to a new
+  `savant-vault` workspace crate. IPC surface (`setup_master_key`,
+  `infer_openrouter`, `vault_list_profiles`) unchanged; consumers of
+  `savant_shell::security::master_key` must migrate to
+  `savant_vault::master_key`.
+- **Cascade-ordering rationale consolidated (FID-021, doc-only)** —
+  moved the dotted cascade-ordering rationale (5-strategy vault cascade:
+  env vars → cwd `.env` → exe-dir `.env` → JSON vault → UI prompt, plus
+  the cwd-FIRST `.env` precedence rule from FID-020/FID-020r2) into a
+  single canonical paragraph at
+  [`crates/vault/src/master_key.rs`](crates/vault/src/master_key.rs)
+  (cascade docstring referencing the canonical cascade-ordering phrase section
+  the 5-strategy enumeration). All 5 prior duplicates replaced with
+  one-line forward-pointers referencing the canonical by exact phrase
+  — enables a future doc-drift linter to detect drift via
+  (the canonical cascade-ordering phrase is the drift-detection anchor;
+  expects 5 anchors across the codebase after consolidation: 1 canonical +
+  4 forward-pointers).
+  Drift closed: 4 cascade-prose duplicates removed (`src-tauri/src/lib.rs::run()`
+  doc comment, `src-tauri/src/lib.rs::load_env_from_exe_dir` doc comment,
+  `src-tauri/Cargo.toml` `dotenvy` dep comment, the drifted [Unreleased]
+  CHANGELOG entry's FID-020r2 `### Fixed` paragraph). 4 file edits,
+  0 lines of code, 0 test changes. `cargo check --workspace --tests`
+  clean; `cargo test --test vault_dotenv_strategy_test` 4/4 PASS;
+  substring invariant: lib.rs=2 + Cargo.toml=1 + CHANGELOG=1 +
+  master_key.rs=1 = 5 anchors (4 forward-pointers + 1 canonical). Cross-ref:
+  [`dev/fids/archive/FID-2026-07-13-021-cascade-doc-consolidation.md`].
+
+### Fixed
+
+- **Vault strategies 2/3 (`.env` file loading) wired at startup** (FID-020 + FID-020r2)
+  [`src-tauri/src/lib.rs:savant_shell::run()`]: the vault's 5-strategy
+  cascade listed strategies 2 (cwd `.env`) and 3 (exe-dir `.env`) in
+  its docstring [`crates/vault/src/master_key.rs:25-26`], but no code
+  ever called `dotenvy::dotenv()` to actually load those files —  so those two strategies have been silently  non-functional since at least the v0.0.4 release. **FID-020 wired
+  strategy 2** (cwd `dotenvy::dotenv().ok();` at startup).
+  **FID-020r2 wired strategy 3** (exe-dir `.env`) via the new
+  [`savant_shell::load_env_from_exe_dir`] helper called from
+  [`run()`] with `std::env::current_exe()`. **See
+  [`savant_vault::master_key`] (cascade docstring "Precedence & `.env` loading" paragraph) for the cwd-FIRST `.env` precedence
+  rationale.** The smoking gun: `dotenvy` was declared in
+  `src-tauri/Cargo.toml` for the entire FID-019 sequence, but a
+  workspace-wide grep for `use dotenvy` / `dotenvy::` returned zero
+  matches (confirmed in the FID-019r2 dead-dep audit). The fix adds
+  `dotenvy::dotenv().ok();` to the top of [`savant_shell::run()`] —
+  the `.ok()` ignores the `IoError::NotFound` case (no `.env` file is
+  the common dev / packaged-prod scenario — the OS env or the vault
+  file covers it). Placed **before** `tracing_subscriber::fmt().init()`
+  so that `RUST_LOG` set in `.env` is respected by the subscriber.
+  The `dotenvy` workspace dep is re-added to `src-tauri/Cargo.toml`
+  (was removed in FID-019r2 as "dead" before we realized the call
+  site was missing). New integration test
+  [`src-tauri/tests/vault_dotenv_strategy_test.rs`] creates a unique
+  temp `.env` per process, calls `dotenvy::from_path().ok()` for
+  parallel-test safety (avoids mutating process cwd, which would race
+  with other tests), and asserts
+  `savant_vault::master_key::resolve_secret("env:<TEST_KEY>")` returns
+  the value. A 2nd test in the same file guards against regression:
+  with no `.env` loaded, `resolve_secret` still errors with
+  `InvalidKeyFormat` on an unset env var. `cargo check --workspace
+  --tests` clean.
+
 ## [Unreleased]
+
+Work-in-progress against v0.0.5. FID-021 (cascade-doc-consolidation)
+close-out captures the v0.0.4 doc-cleanup work; subsequent v0.0.5 work
+will land here.
 
 ### Added
 

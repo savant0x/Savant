@@ -10,13 +10,12 @@
 //! The `src-tauri/src/main.rs` calls `savant_shell::run()` to bootstrap.
 
 pub mod inference;
-pub mod security;
 
-use crate::security::master_key::{self, ProfileSummary};
 use crate::inference::openrouter;
+use savant_vault::master_key::{self, ProfileSummary};
 use savant_agent::consciousness::ConsciousnessState;
 use savant_agent::pulse::prompts::LENSES;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
@@ -192,8 +191,54 @@ async fn trigger_reflection(
     Ok(narrative)
 }
 
+/// FID-020r2: Load `<exe_dir>/.env` to wire the vault's strategy 3
+/// (`crates/vault/src/master_key.rs:19`). Called from `run()` with
+/// `std::env::current_exe()`; `pub` so integration tests can pass a
+/// fake `exe_path` without booting Tauri.
+///
+/// Returns `Ok(())` on success (regardless of whether `.env` was
+/// found — the caller wraps in `.ok()` to match strategy 2's
+/// silent-no-fail behavior). Propagates the original dotenvy error
+/// otherwise. Missing `.env` (the common dev / packaged-prod case
+/// — the OS env or the vault file covers it) returns
+/// `Err(dotenvy::Error::Io(NotFound))`.
+///
+/// **Note:** `run()` ALSO guards `current_exe()` with
+/// `if let Ok(exe)` — if `current_exe()` itself fails, strategy 3
+/// is silently skipped and the cwd fallback (strategy 2) covers the
+/// common case. **The cwd-FIRST `.env` precedence rationale lives
+/// in the canonical docstring block at [`savant_vault::master_key`]
+/// — see the "Precedence & `.env` loading" paragraph below the
+/// 5-strategy enumeration.**
+pub fn load_env_from_exe_dir(exe_path: &Path) -> Result<(), dotenvy::Error> {
+    let parent = exe_path.parent().ok_or_else(|| {
+        dotenvy::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "exe_path has no parent directory (root path?)",
+        ))
+    })?;
+    dotenvy::from_path(&parent.join(".env")).map(|_| ())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // FID-020 + FID-020r2: Wire the vault's strategies 2 (cwd `.env`)
+    // + 3 (exe-dir `.env`) by loading `.env` files at startup. Without
+    // these calls the vault's 5-strategy cascade lists both strategies
+    // in its docstring but the env vars are never actually populated
+    // from disk, so the cascade silently falls through to the vault
+    // file on every `.env` reference. The `.ok()` ignores the common
+    // case where no `.env` file exists (dev / packaged prod rely on
+    // the OS env or the vault file instead). **The cwd-FIRST `.env`
+    // precedence rationale lives in the canonical docstring block at
+    // [`savant_vault::master_key`] — see the "Precedence & `.env` loading" paragraph below the 5-strategy enumeration.** Placed
+    // BEFORE `tracing_subscriber::fmt().init()` so that `RUST_LOG` set
+    // in `.env` is respected by the subscriber.
+    dotenvy::dotenv().ok();
+    if let Ok(exe) = std::env::current_exe() {
+        load_env_from_exe_dir(&exe).ok();
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

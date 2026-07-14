@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::security::master_key;
+use savant_vault::master_key;
 
 /// Public so tests can pin the exact URL against accidental drift.
 pub const OPENROUTER_CHAT_COMPLETIONS: &str =

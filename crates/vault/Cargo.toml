@@ -1,0 +1,57 @@
+[package]
+name = "savant_vault"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Application-layer secrets vault — multi-profile persistence with AES-256-GCM + keyring at-rest encryption. Cross-platform (Windows DPAPI via keyring's windows-native, Linux libsecret via Secret Service D-Bus, macOS Keychain). Moved from src-tauri/src/security/master_key.rs in FID-019 so src-tauri/ can be a thin IPC shell."
+
+[dependencies]
+# Crypto primitives (AgentKeyPair uses ed25519-dalek)
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+
+# VaultError + Result
+thiserror = { workspace = true }
+
+# Vault / ProviderProfile / ProfileSummary serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+
+# Async I/O for load_vault / save_profile / list_profiles
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# Phase 5 r4 — unified at-rest encryption on every desktop OS.
+# The vault blob is encrypted with AES-256-GCM (RustCrypto `aes-gcm`); the
+# random 256-bit key is stored in the OS credential service via the `keyring`
+# crate. The `keyring` crate's per-platform backends handle the platform-
+# specific key storage:
+#   - Windows: `windows-native` (wraps DPAPI, user scope)
+#   - Linux:   `sync-secret-service` (libsecret via Secret Service D-Bus)
+#   - macOS:   `apple-native` (Keychain via Security framework)
+aes-gcm = { workspace = true }
+
+# AgentKeyPair UUIDs (key_id)
+uuid = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# `sync-secret-service` = DBus Secret Service API (GNOME Keyring / KWallet).
+# Works in any standard desktop session. The `linux-native-sync-persistent`
+# backend is faster but requires ext4/btrfs fscrypt; not enabled by default.
+keyring = { workspace = true, features = ["sync-secret-service"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

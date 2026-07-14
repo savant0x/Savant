@@ -30,27 +30,29 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-ed25519-dalek = { workspace = true }
-rand = { workspace = true }
-hex = { workspace = true }
-
+# Note: ed25519-dalek, rand, hex, uuid moved to `savant-vault` (FID-019) —
+# they were only used by master_key.rs, which now lives in its own
+# workspace crate. thiserror stays here — it's used by the inference
+# module's InferenceError. `dotenvy` was removed in FID-019r2 (assumed
+# dead) and re-added in FID-020 + FID-020r2 — `dotenvy::dotenv().ok();`
+# is called at the top of `savant_shell::run()` to wire the vault's
+# strategy 2 (cwd `.env`); the `pub fn load_env_from_exe_dir` helper
+# (called with `&std::env::current_exe()` in `run()`) wires strategy 3
+# (exe-dir `.env`). **See [`crates/vault/src/master_key.rs`](crates/vault/src/master_key.rs) (cascade
+# docstring "Precedence & `.env` loading" paragraph) for the cwd-FIRST
+# `.env` precedence rationale** — kept out of this comment to avoid
+# duplication.
 chrono = { workspace = true }
 dotenvy = { workspace = true }
-uuid = { workspace = true }
 
-thiserror = { workspace = true }
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# Phase 5 — DPAPI at-rest vault encryption (Windows).
-# On Windows: encrypts the entire vault blob with CryptProtectData (user scope).
-# On Unix: passthrough no-op (relies on 0o600 file perms); libsecret parity is a future FID.
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = [
-    "Win32_Foundation",
-    "Win32_Security_Cryptography",
-] }
+# FID-019 — Vault moved to its own workspace crate (savant-vault).
+# The IPC surface here just re-exports the vault API.
+savant_vault = { workspace = true }
 
 # FID-017 — Inner monologue wiring (savant_agent)
 savant_agent = { workspace = true }
@@ -59,7 +61,10 @@ tokio-util = { workspace = true }
 
 # Note: schemars is reserved for Phase 2 specta bindings; not pulled in Phase 1.
 
-[dev-dependencies]
-tempfile = "3"
-tokio-test = "0.4"
-mockito = "1"
+# Note: the per-platform `keyring` deps live in the `savant-vault` crate now
+# (FID-019). src-tauri/ is a thin IPC shell that re-exports the vault API.
+
+# Note: the dev-dependencies (tempfile, tokio-test, mockito) previously
+# listed here were all dead — the only tests that used them lived in
+# `tests/master_key_test.rs` (moved to `crates/vault/tests/` in FID-019).
+# `tempfile` is now in `crates/vault/Cargo.toml [dev-dependencies]`.

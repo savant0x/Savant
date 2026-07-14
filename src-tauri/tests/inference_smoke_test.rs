@@ -7,7 +7,7 @@
 //! per-hermes-rs OAUTH_DESIGN.md auth profile model).
 
 use savant_shell::inference::openrouter::{self, InferenceError};
-use savant_shell::security::master_key::{self, VaultError};
+use savant_vault::master_key::{self, VaultError};
 use std::env;
 
 #[tokio::test]

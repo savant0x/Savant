@@ -18,6 +18,7 @@ members = [
     "crates/integrations",
     "crates/security",
     "crates/sandbox",
+    "crates/vault",
     "crates/echo",
     "crates/browser",
     "crates/toolforge",
@@ -72,6 +73,7 @@ savant_agent = { path = "crates/agent" }
 savant_mcp = { path = "crates/mcp" }
 savant_security = { path = "crates/security" }
 savant_sandbox = { path = "crates/sandbox" }
+savant_vault = { path = "crates/vault" }
 savant_channels = { path = "crates/channels" }
 savant_canvas = { path = "crates/canvas" }
 savant_panopticon = { path = "crates/panopticon" }
@@ -141,6 +143,14 @@ grep-matcher = "0.1"
 globset = "0.4"
 shared_child = "1"
 keyring = { version = "3.6", features = ["windows-native"] }
+
+# Phase 5 r3 — Unix at-rest vault encryption (keyring + AES-256-GCM).
+# On Unix, the vault file is encrypted with a random 256-bit key stored in
+# the OS credential service (libsecret via Secret Service D-Bus on Linux,
+# Keychain on macOS); the key is fetched at runtime to decrypt.
+# The `aes-gcm` crate is a pure-Rust RustCrypto AEAD cipher (well-audited,
+# no unsafe in the safe API, hardware-accelerated on modern CPUs).
+aes-gcm = "0.10"
 
 # Windows API (for Job Object sandboxing)
 windows = { version = "0.56", features = [

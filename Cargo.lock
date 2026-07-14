@@ -278,16 +278,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assert-json-diff"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1557,16 +1547,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
-name = "colored"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
-dependencies = [
- "lazy_static",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,6 +2361,16 @@ dependencies = [
  "libc",
  "libdbus-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "dbus-secret-service"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "708b509edf7889e53d7efb0ffadd994cc6c2345ccb62f55cfd6b0682165e4fa6"
+dependencies = [
+ "dbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -5395,7 +5385,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
 dependencies = [
  "byteorder",
+ "dbus-secret-service",
  "log",
+ "security-framework 2.11.1",
+ "security-framework 3.7.0",
  "windows-sys 0.60.2",
  "zeroize",
 ]
@@ -5915,31 +5908,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockito"
-version = "1.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90820618712cab19cfc46b274c6c22546a82affcb3c3bdf0f29e3db8e1bb92c0"
-dependencies = [
- "assert-json-diff",
- "bytes",
- "colored",
- "futures-core",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.9.0",
- "hyper-util",
- "log",
- "pin-project-lite",
- "rand 0.9.4",
- "regex",
- "serde_json",
- "serde_urlencoded",
- "similar",
- "tokio",
-]
-
-[[package]]
 name = "moka"
 version = "0.12.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6070,7 +6038,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework",
+ "security-framework 3.7.0",
  "security-framework-sys",
  "tempfile",
 ]
@@ -8631,7 +8599,7 @@ dependencies = [
  "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework",
+ "security-framework 3.7.0",
 ]
 
 [[package]]
@@ -8668,7 +8636,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-platform-verifier-android",
  "rustls-webpki 0.103.13",
- "security-framework",
+ "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
  "windows-sys 0.61.2",
@@ -8841,25 +8809,19 @@ dependencies = [
  "async-trait",
  "chrono",
  "dotenvy",
- "ed25519-dalek",
- "hex",
- "mockito",
- "rand 0.8.6",
  "reqwest 0.12.28",
  "savant_agent",
  "savant_core",
+ "savant_vault",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
- "tempfile",
  "thiserror 1.0.69",
  "tokio",
- "tokio-test",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -9428,6 +9390,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "savant_vault"
+version = "0.0.4"
+dependencies = [
+ "aes-gcm",
+ "chrono",
+ "ed25519-dalek",
+ "hex",
+ "keyring",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "scc"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9603,6 +9584,19 @@ checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
 dependencies = [
  "serde",
  "zeroize",
+]
+
+[[package]]
+name = "security-framework"
+version = "2.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
+dependencies = [
+ "bitflags 2.11.1",
+ "core-foundation 0.9.4",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
 ]
 
 [[package]]
@@ -11334,17 +11328,6 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "tokio-test"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f6d24790a10a7af737693a3e8f1d03faef7e6ca0cc99aae5066f533766de545"
-dependencies = [
- "futures-core",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]

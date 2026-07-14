@@ -9,22 +9,61 @@
 //!   2. cwd `.env` (developer convenience)
 //!   3. exe-dir `.env` (packaged app)
 //!   4. Encrypted vault file at OS app-data dir
-//!      (Windows: `%APPDATA%/savant/auth.json` [DPAPI-encrypted] / Unix: `~/.config/savant/auth.json` [plain JSON, 0o600])
+//!      (Windows: `%APPDATA%/savant/auth.json` [DPAPI-encrypted] /
+//!       Unix: `~/.config/savant/auth.json` [AES-256-GCM, key in OS credential service])
 //!   5. UI prompt (`MasterKeySetup.tsx`) → persist to vault file
 //!
-//! Unix perms enforced 0o600. Windows: **Phase 5** — vault is DPAPI-encrypted at rest
-//! (user scope, `CRYPTPROTECT_LOCAL_MACHINE` flag = 0). The encrypted blob binds to
-//! the current Windows user SID; if `auth.json` is copied to another machine or
-//! another user, it cannot be decrypted. Trade-off: a system-level password reset
-//! (admin force-reset without old password) can invalidate the DPAPI master key,
-//! requiring a fresh `setup_master_key` re-vault. Standard user password CHANGES
-//! do NOT invalidate DPAPI (Windows auto-rewraps the master key on logon).
+//! **Precedence & `.env` loading (FID-020 + FID-020r2) — THE
+//! canonical reference for the cwd-FIRST ordering rationale**:
+//! Strategy 2 is loaded BEFORE strategy 3 at startup so that
+//! cwd `.env` wins over exe-dir `.env` when both define the same
+//! var. `dotenvy::from_path` intentionally does NOT overwrite
+//! existing env vars — by loading cwd FIRST, any var set in
+//! `<cwd>/.env` takes precedence over the same var set in
+//! `<exe_dir>/.env`, matching the strategy numbering (2 precedes
+//! 3). Both loaders use `.ok()` to swallow the no-`.env` common
+//! case (dev / packaged-prod typically have no `.env` at all —
+//! env vars or the vault file cover it). Wire-up implementation:
+//! [`savant_shell::run()` in `src-tauri/src/lib.rs`] +
+//! `pub fn load_env_from_exe_dir` (FID-020r2).
+//!
+//! Unix perms enforced 0o600. **Phase 5** — at-rest encryption on every desktop OS:
+//! AES-256-GCM (RustCrypto `aes-gcm` crate, hardware-accelerated) with the random
+//! 256-bit key stored in the OS credential service via the `keyring` crate:
+//!   - **Windows**: `keyring` `windows-native` backend wraps DPAPI (user scope).
+//!     The DPAPI master key binds to the current Windows user SID; if `auth.json` is
+//!     copied to another machine or another user, it cannot be decrypted. Trade-off:
+//!     a system-level password reset (admin force-reset without old password) can
+//!     invalidate the DPAPI master key, requiring a fresh `setup_master_key` re-vault.
+//!     Standard user password CHANGES do NOT invalidate DPAPI (Windows auto-rewraps).
+//!   - **Linux**: Secret Service D-Bus API (GNOME Keyring / KWallet). The
+//!     `sync-secret-service` keyring feature is enabled. A D-Bus session is required.
+//!   - **macOS**: Keychain via Security framework. The `apple-native` keyring
+//!     feature is enabled. Always available on macOS.
+//!
+//! The 12-byte nonce is random per encryption (NIST SP 800-38D §5.2.1.1). The
+//! 16-byte GCM authentication tag is appended to the ciphertext by `aes-gcm`.
+//! The keyring entry is per-user (the OS credential service binds the key to the
+//! user's session); a copy of the vault file to another machine or user cannot be
+//! decrypted without the key from that user's credential service.
+//!
+//! This unified model (AES-256-GCM + keyring on every platform) replaced the prior
+//! per-platform split: Phase 5 originally used `CryptProtectData` / `CryptUnprotectData`
+//! directly via the `windows` crate on Windows + a plaintext passthrough on Unix.
+//! Phase 5 r3 added the `keyring` + AES-256-GCM path for Unix. **Phase 5 r4 (this
+//! pass)** unifies the path — the `keyring` crate's `windows-native` backend is
+//! already a DPAPI wrapper, so direct DPAPI FFI is no longer needed.
 //!
 //! File format versioning:
 //!   - v1: plain JSON `{ "version": 1, "profiles": {...}, "agent_identity": {...} }`
 //!   - v2: `SAVANT_VAULT_V2\n` magic header (16 bytes) + DPAPI-encrypted JSON blob
 //!   On `load_vault()`, v1 files are detected via the absence of the magic header
 //!   and lazily migrated to v2 (immediate re-write on first load after upgrade).
+//!
+//! **FID-019 (this move)**: relocated from `src-tauri/src/security/master_key.rs`
+//! to its own workspace crate (`savant-vault`) so `src-tauri/` can be a thin IPC
+//! shell. The implementation is unchanged; the file format, public API, and
+//! test surface are preserved verbatim.
 
 use std::collections::HashMap;
 use std::fs;
@@ -220,130 +259,118 @@ pub fn tmp_path_for(path: &Path) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Platform-conditional at-rest protection (DPAPI on Windows, passthrough on Unix)
+// At-rest protection — unified AES-256-GCM + keyring path
+// (every desktop OS: Windows via keyring's DPAPI wrapper, Linux via libsecret,
+//  macOS via Keychain).
 // ---------------------------------------------------------------------------
 
-/// Dispatcher: protect plaintext bytes. Windows uses DPAPI; Unix is a passthrough
-/// (the file's 0o600 perms are the only at-rest protection; libsecret parity is a future FID).
-fn platform_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
-    #[cfg(target_os = "windows")]
-    {
-        dpapi_protect(plaintext)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Unix passthrough: encryption is deferred to libsecret in a future FID.
-        // For now, the magic header is still prepended by `write_vault_file`, so the
-        // file format is consistent across platforms even though the "encrypted"
-        // bytes on Unix are the same as the plaintext.
-        Ok(plaintext.to_vec())
-    }
-}
+/// Keyring service name (groups all Savant vault key entries).
+const KEYRING_SERVICE: &str = "savant-vault-key";
+/// Keyring username (single vault-wide key; per-profile keys are a future FID).
+const KEYRING_USER: &str = "default";
 
-/// Dispatcher: unprotect vault blob bytes. Windows uses DPAPI; Unix is a passthrough.
-fn platform_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
-    #[cfg(target_os = "windows")]
-    {
-        dpapi_unprotect(blob)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(blob.to_vec())
-    }
-}
-
-/// Windows DPAPI protect (user scope, `CRYPTPROTECT_LOCAL_MACHINE` flag = 0).
+/// Get-or-create the 256-bit AES-256-GCM key from the OS credential service.
 ///
-/// The encrypted blob is bound to the current Windows user SID. It can only be
-/// decrypted by the same user on the same machine. Standard password changes do
-/// not invalidate DPAPI (Windows re-wraps the master key on logon); a system-level
-/// password reset (admin force-reset without old password) can.
-#[cfg(target_os = "windows")]
-fn dpapi_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
-    use std::ffi::c_void;
-    use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{HLOCAL, LocalFree};
-    use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+/// On first use, generates a random 32-byte key via `OsRng` and stores it hex-encoded
+/// in the keyring. On subsequent reads, fetches the key from the keyring. The keyring
+/// entry is per-user (DPAPI on Windows, libsecret's D-Bus session on Linux, Keychain
+/// on macOS); another user on the same machine (or the vault file copied to another
+/// machine) cannot decrypt without the key from that user's credential service.
+fn get_or_create_vault_key() -> Result<[u8; 32]> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| VaultError::EncryptionFailed(format!("keyring entry: {}", e)))?;
 
-    let mut input = CRYPT_INTEGER_BLOB {
-        cbData: plaintext.len() as u32,
-        pbData: plaintext.as_ptr() as *mut u8,
-    };
-    let mut output = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: std::ptr::null_mut(),
-    };
-
-    unsafe {
-        CryptProtectData(
-            &mut input,
-            PCWSTR::null(),
-            None,                       // poptionalentropy: Option<*const CRYPT_INTEGER_BLOB>
-            None,                       // pvreserved: Option<*const c_void>
-            Some(std::ptr::null()),     // ppromptstruct: Option<*const CRYPT_PROMPTSTRUCT> (no UI prompt)
-            0,                          // dwflags: user scope (no CRYPTPROTECT_LOCAL_MACHINE)
-            &mut output,
-        )
-        .map_err(|e| {
-            VaultError::EncryptionFailed(format!("CryptProtectData: {}", e.message()))
-        })?;
+    match entry.get_password() {
+        Ok(hex_key) => {
+            // Existing key: hex-decode to 32 bytes. Capture the length
+            // BEFORE `try_into` consumes the Vec, so the error closure can
+            // report the actual length.
+            let bytes = hex::decode(&hex_key).map_err(|e| {
+                VaultError::DecryptionFailed(format!("keyring key hex decode: {}", e))
+            })?;
+            let len = bytes.len();
+            bytes.try_into().map_err(|_| {
+                VaultError::DecryptionFailed(format!(
+                    "keyring key length {} (expected 32)",
+                    len
+                ))
+            })
+        }
+        Err(keyring::Error::NoEntry) => {
+            // First use: generate a new random key and store it.
+            let mut key = [0u8; 32];
+            use rand::RngCore;
+            OsRng.fill_bytes(&mut key);
+            entry
+                .set_password(&hex::encode(key))
+                .map_err(|e| VaultError::EncryptionFailed(format!("keyring set: {}", e)))?;
+            Ok(key)
+        }
+        Err(e) => Err(VaultError::EncryptionFailed(format!("keyring get: {}", e))),
     }
-
-    let protected = unsafe {
-        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
-    };
-
-    // DPAPI allocates `output.pbData` on the local heap; we MUST LocalFree it
-    // after copying the bytes into a Rust Vec. Ignoring the return value is safe:
-    // LocalFree returns NULL on success and the original handle on failure (which
-    // we can't do anything about at this point).
-    unsafe {
-        let _ = LocalFree(HLOCAL(output.pbData as *mut c_void));
-    }
-
-    Ok(protected)
 }
 
-/// Windows DPAPI unprotect. Inverse of `dpapi_protect`.
-#[cfg(target_os = "windows")]
-fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
-    use std::ffi::c_void;
-    use windows::Win32::Foundation::{HLOCAL, LocalFree};
-    use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
+/// Dispatcher: protect plaintext bytes. Unified AES-256-GCM path on every platform
+/// (the `keyring` crate's backend handles the platform-specific key storage).
+///
+/// `pub` so the integration test in `crates/vault/tests/master_key_test.rs` can
+/// exercise the roundtrip directly. The dispatcher pattern is preserved in case
+/// a future FID reintroduces a per-platform split (e.g. hardware-bound keys).
+pub fn platform_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
+    aes_gcm_protect(plaintext)
+}
 
-    let mut input = CRYPT_INTEGER_BLOB {
-        cbData: blob.len() as u32,
-        pbData: blob.as_ptr() as *mut u8,
-    };
-    let mut output = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: std::ptr::null_mut(),
-    };
+/// Dispatcher: unprotect vault blob bytes. Unified AES-256-GCM path on every platform.
+///
+/// `pub` for the same reason as [`platform_protect`].
+pub fn platform_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
+    aes_gcm_unprotect(blob)
+}
 
-    unsafe {
-        CryptUnprotectData(
-            &mut input,
-            Some(std::ptr::null_mut()),   // ppszdatadescr: Option<*mut PWSTR> (description output, not needed)
-            None,                          // poptionalentropy: Option<*const CRYPT_INTEGER_BLOB>
-            None,                          // pvreserved: Option<*const c_void>
-            Some(std::ptr::null()),        // ppromptstruct: Option<*const CRYPT_PROMPTSTRUCT>
-            0,
-            &mut output,
-        )
-        .map_err(|e| {
-            VaultError::DecryptionFailed(format!("CryptUnprotectData: {}", e.message()))
-        })?;
+/// AES-256-GCM protect. On-disk payload: `<12-byte nonce><ciphertext + 16-byte tag>`.
+/// Nonce is random per encryption (NIST SP 800-38D §5.2.1.1).
+fn aes_gcm_protect(plaintext: &[u8]) -> Result<Vec<u8>> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+    use rand::RngCore;
+
+    let key_bytes = get_or_create_vault_key()?;
+    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let cipher = Aes256Gcm::new(key);
+
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext_with_tag = cipher
+        .encrypt(nonce, plaintext)
+        .map_err(|e| VaultError::EncryptionFailed(format!("AES-GCM encrypt: {}", e)))?;
+
+    let mut out = Vec::with_capacity(12 + ciphertext_with_tag.len());
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext_with_tag);
+    Ok(out)
+}
+
+/// AES-256-GCM unprotect. Inverse of `aes_gcm_protect`.
+/// The on-disk payload is split: first 12 bytes = nonce; remainder = ciphertext + 16-byte GCM tag.
+fn aes_gcm_unprotect(blob: &[u8]) -> Result<Vec<u8>> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+
+    // Minimum size: 12-byte nonce + 16-byte GCM tag = 28 bytes (empty plaintext).
+    if blob.len() < 28 {
+        return Err(VaultError::CorruptedVault);
     }
+    let (nonce_bytes, ciphertext_and_tag) = blob.split_at(12);
+    let key_bytes = get_or_create_vault_key()?;
+    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Nonce::from_slice(nonce_bytes);
 
-    let plaintext = unsafe {
-        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
-    };
-
-    unsafe {
-        let _ = LocalFree(HLOCAL(output.pbData as *mut c_void));
-    }
-
-    Ok(plaintext)
+    cipher
+        .decrypt(nonce, ciphertext_and_tag)
+        .map_err(|e| VaultError::DecryptionFailed(format!("AES-GCM decrypt: {}", e)))
 }
 
 // ---------------------------------------------------------------------------
