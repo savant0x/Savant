@@ -208,6 +208,8 @@ will land here.
 
 ### Changed
 
+- **Tauri bundle identifier + Cargo crate/binary names aligned to `savant` brand** — `src-tauri/tauri.conf.json:identifier` `com.savant.core` → `com.savant.app`; `src-tauri/Cargo.toml` `[package].name` + `[[bin]].name` `savant-core` → `savant`. Final state: lib name `savant_shell` (unchanged from FID-016r2); crate + binary names `savant`; bundle identifier `com.savant.app`. Closes the boilerplate-era `savant-core`/`com.savant.core` artifacts in favor of full alignment with the renderer (`package.json: "savant"`) + protocol metadata (`protocol.config.yaml project.name: "savant"`) + workspace brand. **Forward-effective**: existing v0.0.4 + earlier users will need to **re-install** the app (Windows registry entry + `%APPDATA%` dir rename; macOS `.app` bundle path change; Linux `.desktop` entry rename) — standard identity-rename cost. Per LESSON-019 release-only-versioning discipline, lands in v0.0.5 (the current `VERSION` + `package.json` stay at 0.0.4; the change takes effect at the next release cut).
+
 ### Fixed
 
 ### Removed
