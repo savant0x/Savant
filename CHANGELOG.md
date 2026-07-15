@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- FID-029 §Step 8–10 (chat persistence backend): Tauri runtime async memory init + 5 production chat IPC commands composing AsyncMemoryBackend primitives (`list_chat_sessions`, `load_chat_history`, `persist_chat_turn`, `delete_chat_session`, `search_chat_history`). `AppMemory` late-binding slot registered; `NullEmbeddingProvider` exposed at savant_memory crate root for Layer 1 chat engine. `src/app/chat/chat_persistence.test.tsx` integration test (6 vitest cases). Layer 1 close-out kickoff for v0.0.9 cycle.
+
+
 Work-in-progress against v0.0.9. Open candidates: (a) FID-029 §Step 2-5 (chat persistence renderer-side); (b) FID-030 (CLI scaffold); (c) FID-032 (api-client refactor); (d) FID-033 (Tauri repackaging to apps/tauri/); (e) FID-034 (kernel trait adoption); (f) FID-035 master-FID §Layered Build Order. Awaiting begin-ratification per LESSON-051.
 
 

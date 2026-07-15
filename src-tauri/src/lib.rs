@@ -14,6 +14,7 @@
 
 pub mod inference;
 pub mod skills;
+pub mod chat_persistence;
 
 use crate::inference::openrouter;
 use savant_vault::master_key::{self, ProfileSummary};
@@ -318,7 +319,16 @@ pub fn run() {
             describe_skill,
             execute_skill,
             cancel_skill_execution,
-            get_skill_status
+            get_skill_status,
+            // ─── FID-029 §Step 9 — Chat persistence IPC surface ────────
+            // Layer-1 host per FID-035 §Layered Build Order. Routes
+            // through `AsyncMemoryBackend` lazily-initialised on first
+            // call. Gateway REST equivalents land at FID-032 Layer 3.
+            chat_persistence::list_chat_sessions,
+            chat_persistence::load_chat_history,
+            chat_persistence::persist_chat_turn,
+            chat_persistence::delete_chat_session,
+            chat_persistence::search_chat_history
         ])
         .setup(|app| {
             tracing::info!(
@@ -333,6 +343,11 @@ pub fn run() {
                 .join("workspace-savant");
             std::fs::create_dir_all(&workspace_path).ok();
             app.manage(AppState::new(workspace_path));
+            // FID-029 §Step 8: register the chat-persistence memory slot.
+            // Late-binding pattern — populated lazily by the 5 IPC commands
+            // in `chat_persistence::ensure_backend` to avoid blocking
+            // `setup()` (prevents white-screens on cold start).
+            app.manage(chat_persistence::AppMemory::default());
             // Initialize the skills execution registry — single source of
             // truth for in-flight + recently-completed skill executions +
             // their CancellationTokens. Wired by FID-025 to the 5 IPC

@@ -892,6 +892,84 @@ impl AsyncMemoryBackend {
             .map_err(|e| SavantError::Unknown(e.to_string()))
     }
 
+    // ─── FID-029 §Step 9 backend extensions ─────────────────────────────
+    //
+    // Renderer-side IPC commands (`src-tauri/src/chat_persistence.rs`)
+    // call these methods. They compose ONLY existing engine primitives
+    // per ECHO Law 7 (search-for-existing BEFORE creating new):
+    //   - `iter_session_titles()` for cross-session enumeration
+    //   - `hydrate_session()`     for per-session message reads
+    //   - `delete_session()`      for surgical session removal
+
+    /// Lists all chat session IDs by enumerating the `session_titles`
+    /// sibling collection (FID-029 §Step 1 pattern, generalized for list).
+    pub fn list_chat_sessions(&self) -> Result<Vec<String>, SavantError> {
+        let titles = self
+            .engine
+            .iter_session_titles()
+            .map_err(|e| SavantError::Unknown(e.to_string()))?;
+        Ok(titles.into_keys().collect())
+    }
+
+    /// Cross-session substring search. Iterates all known sessions,
+    /// hydrates each (bounded to `PER_SESSION_BUDGET` messages per
+    /// session), and applies a case-insensitive substring filter on the
+    /// message content. Stops once the global `limit` is reached.
+    pub async fn search_chat_history(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<savant_core::types::ChatMessage>, SavantError> {
+        use savant_core::types::{
+            AgentOutputChannel, ChatMessage, ChatRole, SessionId,
+        };
+
+        const PER_SESSION_BUDGET: usize = 200;
+
+        let query_lower = query.to_lowercase();
+        if query_lower.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let titles = self
+            .engine
+            .iter_session_titles()
+            .map_err(|e| SavantError::Unknown(e.to_string()))?;
+
+        let mut hits: Vec<ChatMessage> = Vec::new();
+        for sid in titles.keys() {
+            let msgs = self
+                .engine
+                .hydrate_session(sid, PER_SESSION_BUDGET)
+                .map_err(|e| SavantError::Unknown(e.to_string()))?;
+            for m in msgs {
+                if !m.content.to_lowercase().contains(&query_lower) {
+                    continue;
+                }
+                if hits.len() >= limit {
+                    return Ok(hits);
+                }
+                hits.push(ChatMessage {
+                    role: match m.role {
+                        crate::models::MessageRole::User => ChatRole::User,
+                        crate::models::MessageRole::Assistant => ChatRole::Assistant,
+                        _ => ChatRole::System,
+                    },
+                    content: m.content.clone(),
+                    sender: None,
+                    recipient: None,
+                    agent_id: None,
+                    session_id: Some(SessionId(m.session_id.clone())),
+                    channel: AgentOutputChannel::Chat,
+                    is_telemetry: false,
+                    images: Vec::new(),
+                    ..Default::default()
+                });
+            }
+        }
+        Ok(hits)
+    }
+
     /// Counts the number of messages in a session.
     pub fn count_session_messages(&self, session_id: &str) -> Result<u64, SavantError> {
         self.engine

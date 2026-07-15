@@ -56,6 +56,48 @@ pub use reflective::{
     QueryIntent, ReflectiveMemory, Relation,
 };
 pub use savant_core::utils::embeddings::EmbeddingService;
+
+// ─── FID-029 §Step 8 — Cross-crate config re-exports ───────────────────
+//
+// `lsm_engine`/`vector_engine` modules are crate-private; their config
+// structs are re-exported here so downstream crates
+// (e.g. `src-tauri/src/chat_persistence.rs`) can construct an
+// `EngineConfig` without depending on the internal module surface.
+
+// ─── FID-029 §Step 8 — Cross-crate config re-exports (re-added post-cleanup) ─────
+pub use lsm_engine::LsmConfig;
+pub use vector_engine::VectorConfig;
+pub use engine::EngineConfig;
+// Note: MemoryConfig is re-exported at crate root earlier in this file.
+
+// ─── FID-029 §Step 9 — NullEmbeddingProvider for chat persistence ──────
+//
+// Layer 1 chat persistence disables semantic search; the engine still
+// requires an `Arc<dyn EmbeddingProvider>`. `NullEmbeddingProvider`
+// returns zero-vectors on every request, satisfying the trait without
+// pulling in a real embedding model.
+pub struct NullEmbeddingProvider;
+
+#[async_trait::async_trait]
+impl savant_core::traits::EmbeddingProvider for NullEmbeddingProvider {
+    async fn embed(
+        &self,
+        _text: &str,
+    ) -> Result<Vec<f32>, savant_core::error::SavantError> {
+        Ok(vec![0.0; 768])
+    }
+
+    async fn embed_batch(
+        &self,
+        texts: &[&str],
+    ) -> Result<Vec<Vec<f32>>, savant_core::error::SavantError> {
+        Ok(texts.iter().map(|_| vec![0.0; 768]).collect())
+    }
+
+    fn dimensions(&self) -> usize {
+        768
+    }
+}
 // Safety verification module is conditionally compiled with kani feature
 #[cfg(feature = "kani")]
 pub use safety::verify_memory_safety;

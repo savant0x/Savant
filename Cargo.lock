@@ -8897,6 +8897,7 @@ dependencies = [
  "reqwest 0.12.28",
  "savant_agent",
  "savant_core",
+ "savant_memory",
  "savant_sandbox",
  "savant_skills",
  "savant_vault",
