@@ -309,3 +309,17 @@ Wire as `pnpm lint:lockfile` + add to `pnpm lint:ci` chain.
 **Codified by:** Spencer (selected Path A "Clean reinstall" from the ask_user prompt) + Buffy (executed rm + npm install + PID kill + boot test + LESSON codification). Pre-state snapshot captured in this conversation turn (next 15.5.20 installed, @next/swc 15.5.19 installed, lockfile at 0.0.5, package.json at 0.0.6, node_modules 748M, 7 dirty files); post-state verified (next 15.5.20, @next/swc 15.5.20, lockfile 0.0.6, node_modules 606M, boot in 1380ms with zero warnings).
 
 <!-- Add new entries above this line -->
+
+### LESSON-061: Shell Orchestrator Scripts Must Avoid Python Dependency
+
+**Date:** 2026-07-15
+**Trigger:** v0.0.7 orchestrator --apply FAIL at Step 3 (`refresh-readme.sh` CHANGELOG-promotion step). Root cause: the script used an inline `python3 <<PYEOF ... PYEOF` heredoc for two operations (rename FIRST `## [Unreleased]` header + insert new `## [Unreleased]` block). The user's Windows Git Bash environment does NOT have `python3` on PATH (Git for Windows does not ship Python).
+**Lesson:** Shell-orchestrator scripts that mutate project meta-files (CHANGELOG, README, VERSION) must use ONLY POSIX-portable tools (`awk`, `sed`, `grep`) that ship with Git for Windows + macOS + Linux by default. Python, Node, Ruby, Perl, etc. dependencies are ALL vulnerable to "not on PATH" silent failures that only surface at release-cut time — exactly when failure is most expensive.
+**Replacement:** `refresh-readme.sh`'s CHANGELOG-promotion step rewritten in pure `awk` (POSIX-compliant). Two awk passes:
+- Pass 4a: rename FIRST `## [Unreleased]` → `## v$X.Y.Z — YYYY-MM-DD` (first-only match via `!found` flag; uses `\xE2\x80\x94` awk hex escape for em-dash).
+- Pass 4b: insert new `## [Unreleased]` block immediately after `# Changelog` H1 header (idempotent via `!inserted` flag).
+Both passes use `CHANGELOG.md > .tmp && mv .tmp CHANGELOG.md` pattern for atomic write + CRLF preservation.
+**Anti-pattern:** inline interpreter heredocs (`python3 <<EOF`, `node -e ...`, `perl -e ...`) inside bash scripts that touch release-cut paths. These scripts run unattended at the most critical release-cut moments; a missing interpreter must NOT be the failure mode.
+**Detection:** a pre-cut sanity check (added to scripts/release-check.sh) should `command -v python3 >/dev/null 2>&1 || echo '[WARN]'` to surface missing-interpreters BEFORE Step 3 runs. Or, more durably: `pnpm release:ci` should lint scripts/`*.sh` for `\b(python3|node|perl|ruby)\b` invocations and flag them as LESSON-061 violations.
+**Exemplar:** `scripts/refresh-readme.sh` (the rewritten CHANGELOG-promotion step) uses only `awk` + `mv` + `sed` for the CHANGELOG mutation — no interpreter dependency.
+**Cross-references:** v0.0.7 release cut recovery (2026-07-15); LESSON-031 (re-grep pattern for fix verification); `coding-standards/release-workflow.md` §Checkpoint Release Discipline; FID-024 §Step E (the orchestrator implementation); the new scripts/release-check.sh advisory for missing interpreters (future FID-XXX tooling).

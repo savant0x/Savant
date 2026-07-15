@@ -8,12 +8,43 @@
 #   - Move CHANGELOG `## [Unreleased]` content → `## v<X.Y.Z>` + new empty `## [Unreleased]`
 #
 # Per LESSON-019: only run at release time (never speculatively)
+# Per LESSON-061: pure awk (no python3 dependency — Git for Windows doesn't ship Python)
 
 set -euo pipefail
 
-TARGET="${1:-}"
+TARGET=""
+PREVIOUS_OVERRIDE=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --previous)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "[FAIL] --previous requires a value" >&2
+                exit 4
+            fi
+            PREVIOUS_OVERRIDE="$1"
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 <target> [--previous <ver>] (e.g., 0.0.7)" >&2
+            exit 0
+            ;;
+        -*)
+            echo "[FAIL] Unknown option: $1" >&2
+            exit 4
+            ;;
+        *)
+            if [ -z "$TARGET" ]; then
+                TARGET="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
 if [ -z "$TARGET" ]; then
-  echo "[FAIL] Usage: $0 <version> (e.g., 0.0.7)" >&2
+  echo "[FAIL] Usage: $0 <target> [--previous <ver>] (e.g., 0.0.7)" >&2
   exit 4
 fi
 
@@ -22,7 +53,16 @@ if ! echo "$TARGET" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   exit 4
 fi
 
-PREVIOUS=$(cat VERSION)
+# Resolve PREVIOUS: prefer explicit --previous override (used by orchestrator
+# after a bump-version.sh call has already mutated VERSION; the orchestrator
+# captured PREVIOUS at its own startup). Fall back to VERSION file for
+# standalone callers.
+if [ -n "$PREVIOUS_OVERRIDE" ]; then
+  PREVIOUS="$PREVIOUS_OVERRIDE"
+else
+  PREVIOUS=$(cat VERSION)
+fi
+
 if [ "$PREVIOUS" = "$TARGET" ]; then
   echo "[FAIL] VERSION already at $TARGET. Run bump-version.sh first or pick a different version." >&2
   exit 2
@@ -79,7 +119,7 @@ if ! grep -E "^\| v${NEXT_VERSION//./\\.} " README.md > /dev/null; then
     sed -i "${LAST_ROW}a\\| v${NEXT_VERSION}  |   1+  | PLANNED  | (TBD: scope for v${NEXT_VERSION} — open candidates: FID-029 §Step 2-5 / FID-030 / FID-032 / FID-033 / FID-034 / FID-035) |" README.md
     echo "[OK] Roadmap v${NEXT_VERSION} PLANNED row added"
   else
-    echo "[WARN] Could not find Roadmap table to append new row"
+    echo "[WARN] Could not find Roadmap table to append new new row"
   fi
 else
   echo "[INFO] Roadmap v${NEXT_VERSION} row already exists; skipping add"
@@ -87,57 +127,41 @@ fi
 echo ""
 
 # 4. CHANGELOG — promote ## [Unreleased] → ## v<TARGET> + add new empty ## [Unreleased] for v<NEXT_VERSION>
+# Per LESSON-061: pure awk (no python3 dependency — Git for Windows doesn't ship Python).
+# Two-pass awk: rename FIRST ## [Unreleased] → new version header, then insert a new
+# ## [Unreleased] block immediately after the # Changelog H1 header.
 echo "[STEP 4] Promoting CHANGELOG ## [Unreleased] → ## v${TARGET} — ${DATE}..."
-if command -v python3 > /dev/null 2>&1; then
-  python3 <<PYEOF
-import sys
-with open('CHANGELOG.md', 'r') as f:
-    content = f.read()
 
-target = "${TARGET}"
-date = "${DATE}"
-next_ver = "${NEXT_VERSION}"
+# 4a. Promote the FIRST "## [Unreleased]" header to "## v<TARGET> — <DATE>" via awk (POSIX, ships in Git for Windows).
+# awk hex escape \xE2\x80\x94 = UTF-8 em-dash (3 bytes); bash single-quoted string passes it through literally.
+awk -v target="$TARGET" -v date="$DATE" '
+/^## \[Unreleased\]/ && !found {
+    print "## v" target " \xE2\x80\x94 " date
+    found = 1
+    next
+}
+{ print }
+' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+echo "  [OK] Promoted first '[Unreleased]' header to '## v${TARGET} — ${DATE}'"
 
-# 1. Promote the FIRST "## [Unreleased]" header to "## v<TARGET> — <DATE>"
-old_header = "## [Unreleased]"
-new_header = f"## v{target} \u2014 {date}"
-if old_header in content:
-    content = content.replace(old_header, new_header, 1)
-    print(f"  [OK] Promoted first '[Unreleased]' header to '{new_header}'")
-else:
-    print("  [WARN] No '## [Unreleased]' header found in CHANGELOG.md")
+# 4b. Insert a NEW empty ## [Unreleased] section immediately after the '# Changelog' H1 header.
+# Idempotent via the `!inserted` flag — only fires on the first H1 match.
+awk -v next_ver="$NEXT_VERSION" '
+/^# Changelog/ && !inserted {
+    print $0
+    print ""
+    print "## [Unreleased]"
+    print ""
+    print "Work-in-progress against v" next_ver ". Open candidates: (a) FID-029 §Step 2-5 (chat persistence renderer-side); (b) FID-030 (CLI scaffold); (c) FID-032 (api-client refactor); (d) FID-033 (Tauri repackaging to apps/tauri/); (e) FID-034 (kernel trait adoption); (f) FID-035 master-FID §Layered Build Order. Awaiting begin-ratification per LESSON-051."
+    print ""
+    inserted = 1
+    next
+}
+{ print }
+' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+echo "  [OK] Added new empty '[Unreleased]' section"
 
-# 2. Insert a NEW empty ## [Unreleased] section at the TOP of the file (after the # Changelog header)
-new_unreleased = f"""## [Unreleased]
-
-Work-in-progress against v{next_ver}. Open candidates: (a) FID-029 §Step 2-5 (chat persistence renderer-side); (b) FID-030 (CLI scaffold); (c) FID-032 (api-client refactor); (d) FID-033 (Tauri repackaging to apps/tauri/); (e) FID-034 (kernel trait adoption); (f) FID-035 master-FID §Layered Build Order. Awaiting begin-ratification per LESSON-051.
-
-"""
-
-# Split on the first H1 header + the blank line after it
-lines = content.split('\n')
-insert_idx = 0
-for i, line in enumerate(lines):
-    if line.startswith('# Changelog'):
-        # Skip past the H1 and the next blank line(s)
-        insert_idx = i + 1
-        while insert_idx < len(lines) and lines[insert_idx].strip() == '':
-            insert_idx += 1
-        break
-
-new_lines = lines[:insert_idx] + [''] + new_unreleased.rstrip('\n').split('\n') + [''] + lines[insert_idx:]
-new_content = '\n'.join(new_lines)
-
-with open('CHANGELOG.md', 'w') as f:
-    f.write(new_content)
-print(f"  [OK] Added new empty '[Unreleased]' section at line {insert_idx + 2}")
-PYEOF
-  echo "[OK] CHANGELOG.md promoted."
-else
-  echo "[FAIL] python3 not found; required for CHANGELOG promotion" >&2
-  exit 1
-fi
-
+echo "[OK] CHANGELOG.md promoted."
 echo ""
 echo "[OK] README + CHANGELOG refresh complete for v$TARGET."
 echo "  Status badge: v${TARGET}_Released"
