@@ -135,11 +135,19 @@ fi
 echo ""
 
 echo "  [Gate D] bash scripts/release-check.sh $TARGET (LESSON-029 3-gate pre-flight)..."
-if bash scripts/release-check.sh "$TARGET" >/dev/null 2>&1; then
-  echo "  [OK] Release-check 3-gate pre-flight PASS."
+if [ "$APPLY" != "--apply" ]; then
+  if bash scripts/release-check.sh "$TARGET" >/dev/null 2>&1; then
+    echo "  [OK] Release-check 3-gate pre-flight PASS."
+  else
+    echo "  [FAIL] Release-check failed. Run scripts/release-check.sh $TARGET for details."
+    exit 3
+  fi
 else
-  echo "  [FAIL] Release-check failed. Run scripts/release-check.sh $TARGET for details."
-  exit 3
+  echo "  [INFO] SKIPPED in --apply mode: orchestrator's Steps 2-3 (bump + refresh) intentionally dirty the working tree, so release-check.sh Gate 1 (clean-tree check) would always fail post-bump."
+  echo "  [INFO] coverage moved to the end of --apply:"
+  echo "         - Gate 1 (clean-tree): release.py at the tail of --apply runs its own clean-tree pre-flight per LESSON-029 (mirrors release-check.sh Gate 1)."
+  echo "         - Gate 2 (transient files): already cleared by Step 4 (clean-bloat.sh --apply)."
+  echo "         - Gate 3 (remote tag advisory): expected to WARN for the new tag — release.py creates the tag itself."
 fi
 echo ""
 
