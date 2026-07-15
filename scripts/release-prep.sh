@@ -83,11 +83,14 @@ fi
 echo ""
 
 # ── Step 3: refresh-readme.sh ──
-echo "[Step 3] refresh-readme.sh $TARGET..."
+# Pass --previous explicitly: the orchestrator captured PREVIOUS at startup
+# (before the bump mutated VERSION). Without this, refresh-readme.sh would
+# read VERSION=0.0.7 and bail out with 'VERSION already at target'.
+echo "[Step 3] refresh-readme.sh $TARGET --previous $PREVIOUS..."
 if [ "$APPLY" = "--apply" ]; then
-  bash scripts/refresh-readme.sh "$TARGET"
+  bash scripts/refresh-readme.sh "$TARGET" --previous "$PREVIOUS"
 else
-  echo "[DRY-RUN] Would update README (status badge + What's New + Roadmap) + CHANGELOG (promote ## [Unreleased] → ## v$TARGET)"
+  echo "[DRY-RUN] Would update README (status badge + What's New + Roadmap) + CHANGELOG (promote ## [Unreleased] → ## v$TARGET) with PREVIOUS=$PREVIOUS"
 fi
 echo ""
 
