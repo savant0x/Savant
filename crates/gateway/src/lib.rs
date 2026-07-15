@@ -9,3 +9,4 @@ pub mod lanes;
 pub mod persistence;
 pub mod server;
 pub mod smithery;
+pub mod static_serve;

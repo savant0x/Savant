@@ -21,6 +21,16 @@ import {
   type ManifestStreamEvent,
 } from "./manifest-mock";
 import { LENSES } from "./reflections/lenses";
+// FID-028 — import the data modules for the 2 mock cases that
+// still need the mock layer (parameter_descriptors + faq). The
+// changelog case is REMOVED in the Spencer correction pass: the
+// changelog now comes from GitHub (client-side fetch) so no
+// mock layer is needed — the IPC wrapper `getChangelog()` calls
+// `fetchChangelog()` directly. See `src/lib/changelog.ts` for the
+// full rationale (end users don't have the local CHANGELOG.md;
+// GitHub is the canonical source).
+import { getParameterDescriptors, getTuningDescriptors } from "./parameter-descriptors";
+import { getFaqItems } from "./faq-data";
 import type {
   AgentManifestPlan,
   BootstrapTier,
@@ -90,6 +100,16 @@ let mockConfig: AppConfig | null = null;
 // re-mounts. Master bytes never leave this module; chat outbound
 // traffic only sees the derived (subkey) `key` field.
 let mockMasters: Record<string, string> = {};
+
+// FID-028 Revision 2 (Spencer 2026-07-14) — Per-knob tuning value
+// mirror (the 4 sampling knobs: temperature, top_p, frequency_penalty,
+// presence_penalty). Populated by the `save_settings` mock case when
+// the Tune page's Apply button fires. The Tune page ALSO writes to
+// `localStorage[LS_TUNE_SETTINGS]` directly (UI concern, not IPC) so
+// the values survive page reloads without a `loadSettings` IPC
+// command. The mock case just acknowledges the dispatch; the Tauri
+// runtime would route through the gateway's `POST /api/settings`.
+let mockTuningValues: Record<string, number> = {};
 
 // FID-008 — env var master key (tier 1, highest priority). Cached on
 // `setupMockIPC()` init from `/api/env`. The env var shadows any
@@ -846,6 +866,63 @@ export function setupMockIPC(): void {
           return narrative;
         })();
         return response$;
+      }
+
+      // ───────────────────────────────────────────────────────────
+      // FID-028 — Scaffold 3 placeholder pages (changelog / faq / tune).
+      // The changelog case was REMOVED in the Spencer correction
+      // pass (2026-07-14) — the changelog now comes from GitHub via
+      // a client-side fetch in `src/lib/changelog.ts`, so no mock
+      // layer is needed (the IPC wrapper `getChangelog()` calls
+      // `fetchChangelog()` directly).
+      // ───────────────────────────────────────────────────────────
+
+      // get_parameter_descriptors — returns the LlmParams descriptor
+      // list (matches the gateway's `/api/models` response body).
+      // All 9 entries: 4 sampling knobs + 5 model-selection fields.
+      // KEPT for the future Settings-page wiring (the Settings page
+      // will use the full list to render model + provider + URL
+      // fields).
+      case "get_parameter_descriptors": {
+        return getParameterDescriptors();
+      }
+
+      // get_tuning_descriptors — returns the 4 TRUE tuning parameter
+      // descriptors (filtered from get_parameter_descriptors). The
+      // Tune page uses this; the 5 model-selection fields (chat_model,
+      // manifestation_model, vision_model, provider, ollama_url) are
+      // configured on the Settings page instead.
+      // Spencer revision 2026-07-14: "Fine tuning is for the actual
+      // model it's self, this page is not to change models."
+      case "get_tuning_descriptors": {
+        return getTuningDescriptors();
+      }
+
+      // save_settings — persists the 4 tuning parameter values
+      // (temperature, top_p, frequency_penalty, presence_penalty).
+      // Browser-preview mock: stores in module-scoped state + returns
+      // success. The Tauri runtime would route through the gateway's
+      // POST /api/settings endpoint (which clamps to the OpenAI
+      // ranges before persisting). The localStorage write happens
+      // in the TUNE PAGE (not here) — it's a UI concern, not an IPC
+      // concern; the mock IPC just acknowledges the dispatch.
+      case "save_settings": {
+        const rawValues = (args.values as Record<string, unknown>) ?? {};
+        const sanitized: Record<string, number> = {};
+        for (const [k, v] of Object.entries(rawValues)) {
+          if (typeof v === "number" && Number.isFinite(v)) {
+            sanitized[k] = v;
+          }
+        }
+        mockTuningValues = sanitized;
+        return { ok: true };
+      }
+
+      // get_faq — returns the curated FAQ Q&A list. No real FAQ
+      // source in the savant-orig (see
+      // `src/lib/faq-data.ts` §Future FID candidate comment).
+      case "get_faq": {
+        return getFaqItems();
       }
 
       default:

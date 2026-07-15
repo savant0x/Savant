@@ -49,8 +49,7 @@ import {
 import { useLoadedConfig } from "@/lib/hooks/use-loaded-config";
 import { useReflections, type ReflectionEntry } from "@/lib/hooks/use-reflections";
 import { formatFullTimestamp } from "@/lib/format-relative-time";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { logger } from "@/lib/logger";
 
 export default function ReflectionsPage() {
@@ -253,31 +252,7 @@ export default function ReflectionsPage() {
                   <i className="far fa-clock text-[10px]" aria-hidden />
                   <time dateTime={r.ts}>{formatFullTimestamp(r.ts)}</time>
                 </header>
-                <div className="prose prose-invert max-w-none text-sm text-foreground">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      // Open external links in a new tab. Internal anchors
-                      // (href starts with #) get a normal target.
-                      a: ({ node, ...props }) => {
-                        const href = String(props.href ?? "");
-                        const isExternal = /^https?:\/\//i.test(href);
-                        if (isExternal) {
-                          return (
-                            <a
-                              {...props}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            />
-                          );
-                        }
-                        return <a {...props} />;
-                      },
-                    }}
-                  >
-                    {r.content}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownRenderer content={r.content} />
               </article>
             ))}
           </div>

@@ -87,4 +87,88 @@
 
 **Codified by:** Savant (2026-07-14) via Spencer's "move completed fids" directive + the discipline sweep's clean no-op state.
 
+### LESSON-053: Double-Boot at Session Start (ECHO.md + Most-Recent Session-Summary)
+
+**Date:** 2026-07-15
+**Trigger:** Cascade failure in this session. The agent did not read `ECHO.md` 0-EOF OR the most-recent `dev/session-summaries/*.md` 0-EOF at session start. The cascade: (a) extrapolate chat-history into file-content claims (LESSON-008 violation); (b) author the cascade-contamination file `dev/AUDIT-PACKET-FOR-NOVA-pre-FID-029.md` with 7 cascading str_replace corrections across 4 rounds of LESSON-031 re-grep verification (ECHO Law 1 + 2 + Cross-Agent Claim Rule violations); (c) treat the Cross-Agent Claim Rule's authoritative claim as actionable without citing source paths; (d) recommend hard-reset based on inflated mental model; (e) Spencer hit the ECHO brake ("none of this should even be possible when echo is activated"); (f) regression to attribution debate; (g) Spencer clarified "stop the blame loop, fix it with echo compliance and get back to work"; (h) this LESSON codifies the boot pattern that would have prevented the entire cascade.
+
+**Lesson:** Every ECHO session has TWO mandatory boot reads, in order:
+1. **ECHO.md 0-EOF** — the single source of truth for the 15 Laws + Perfection Loop FSM + Five Questions + circuit breakers + Cross-Agent Claim Rule + anti-patterns.
+2. **Most-recent `dev/session-summaries/*.md` 0-EOF** — the on-disk project state (open FIDs, WIP files, working-tree interpretation, prior LESSON codifications, FID-TEMPLATE references).
+
+Skipping EITHER read is an ECHO Law 1 (Read 0-EOF Before Touch) violation; both reads are required. The session-summary is the agent's only project-state continuity across multi-session work.
+
+**Permitted uses (no extension required):**
+- Reading ECHO.md + the most-recent session-summary as the first two actions of any session, before any other read or write.
+- Citing the session-summary's open-FID table + WIP interpretation as the source-of-truth for "what's open" vs extrapolating from chat history.
+- Treating the Cross-Agent Claim Rule (LESSON-008 / FID-151) as enforceable: any factual claim sourced from another agent's analysis must cite the source path, not just the attribution.
+- Running BOOT CHECK 3 (`pnpm lint:docs && pnpm lint:defer && cargo check --workspace`) BEFORE any session work to confirm the on-disk invariants + cargo baseline are GREEN.
+
+**Not permitted:**
+- Proceeding from chat-history assumptions about which FIDs are open, closed, or archived. The session-summary inventory is the source of truth.
+- Authoring new audit/consolidation files (audit packets, master-FIDs, integrity manifests) without first reading ECHO.md + session-summary + FID-TEMPLATE 0-EOF.
+- Treating the working-tree's dirty-file count as evidence of authorship. Tracked vs untracked + git blame + git log are the only authoritative attribution.
+- Skipping the ECHO.md read at session start because "I already know ECHO" — ECHO Law 1 is zero-tolerance; "familiarity" is not equivalent to "read 0-EOF this session."
+- Reasoning about "what changed since the last session" without first reading the most-recent session-summary; chat-history continuity ≠ on-disk continuity.
+
+**Pattern (the canonical doctrine):**
+
+1. **Boot Read 1:** `cat ECHO.md` 0-EOF (or `git show HEAD:ECHO.md` for clean-tree discipline). Confirm 15 Laws + Perfection Loop FSM + Cross-Agent Claim Rule.
+2. **Boot Read 2:** `ls -t dev/session-summaries/*.md | head -n 1` → filename → read 0-EOF.
+3. **Boot Check 3:** Run `commands.build` + `commands.type_check` from `protocol.config.yaml` (the project's source-of-truth for language-specific boot invariants). For Savant: `bash scripts/lint-docs.sh && bash scripts/lint-defer.sh && cargo check --workspace && pnpm tsc --noEmit`. Confirm all exit 0 BEFORE any session work begins.
+4. **(optional) Boot Read 4:** `dev/LEARNINGS.md` last 1-2 entries (the most-recent session-summary already encodes the relevant LESSON references; full read is overkill).
+5. **Begin session work** only after steps 1-3 complete. If <3 reads complete, ECHO discipline is NOT active and the agent MUST halt + ASK Spencer.
+
+**Enforcement + tooling:**
+- The current `dev/session-summaries/*.md` template could add a `## Boot Sequence Performed` section as a noop (Spencer's `2026-07-15-0222-echo-bootstrap.md` already pioneers this pattern).
+- A future FID-XXX could write `scripts/check-boot-discipline.sh` that validates the most-recent session-summary has the boot marker + asserts the headline invariants (`pnpm lint:docs`, `pnpm lint:defer`) exit 0 + asserts `cargo check --workspace` is GREEN.
+- The simulator prompt for any future agent should include this LESSON-053 in the canonical boot prompt alongside ECHO.md.
+
+**Cross-references:** ECHO §Session Lifecycle steps 1-7 (the canonical boot sequence); LESSON-001 (call-graph reachability); LESSON-008 (Cross-Agent Claim Rule); LESSON-027 + LESSON-038 (the invariants that BOOT CHECK 3 enforces); LESSON-051 (explicit scope-ratify for autonomous FID closure); FID-TEMPLATE (mandatory read for any new FID body); `dev/session-summaries/2026-07-15-0222-echo-bootstrap.md` (the pioneering session-summary with full Boot Sequence Performed section).
+
+**Anti-pattern documentation (this session's cascade, 2026-07-15):** The cascade failure sequence is recorded above in §Trigger. The recovery sequence is also recorded there: (h) Spencer's "fix with echo compliance and get back to work" directive converted the cascade from a blame-loop toward a single-tool operation: delete the cascade-contamination file (`rm -f dev/AUDIT-PACKET-FOR-NOVA-pre-FID-029.md` since it was untracked + had no project-state references per `grep -rn AUDIT-PACKET`); codify LESSON-053 here; verify the boot invariants re-emerge GREEN; resume work on FID-029 (the lowest-dependency active FID per SPECDO discipline).
+
+**Codified by:** Savant (2026-07-15) via Spencer's cascade-recovery session directive ("fix it with echo compliance and getting back to work") + the ECHO-brake intervention ("you need to read echo 0-end first, none of this should even be possible when echo is activated").
+
+### LESSON-054: Stale-Session Transcript Cleanup Discipline + Cross-Project-Invariant Extraction Pattern
+
+**Date:** 2026-07-15
+**Trigger:** Discovered `[session-ses_09de.md]` (1,655,521 bytes, untracked, workspace root, NOT gitignored) during cascade-recovery. The file is a prior-agent session transcript (combination of Tencent Hy3 + StepFun Step 3.7 Flash sessions for the same project) — the prior agent was confused about which project it was working on (assumed "Savant Trading" per system-prompt-embedded Savant Trading context, but the actual on-disk project is Savant v0.0.5, a Next.js + Tauri shell, NOT Savant Trading per `protocol.config.yaml`). Surfaced two actionable cross-project invariants: (a) **on-disk ECHO always wins** over system-prompt-embedded content (basher-verified: `ECHO.md` on disk is v0.1.1; embedded `ECHO.md` was v0.1.0 with Savant Trading app-specific commands — `cd dashboard && npm run build`, `cargo test` = 264 tests — none of which apply to Savant); (b) **verify project-context before any `cd` or `npm install`** — the prior agent attempted `pnpm install three @react-three/fiber @react-three/drei...` for an icon-pack wire-up, with no `dashboard/` directory existing on disk to `cd` into. Spencer ratified "extract + rm" disposition per LESSON-029 cleanup + LESSON-008 Cross-Agent Claim Rule.
+
+**Lesson:** When an untracked workspace-root `session-ses_*.md` or `*-session-trail*.md` file appears (likely from a prior agent's session log dump), it is simultaneously: (a) a **soft evidence-source** for prior-agent confusion patterns (per LESSON-008 Cross-Agent Claim Rule — attribution is not a source); and (b) a **candidate for LESSON-029 + LESSON-050 cleanup** (workspace-bloat pattern matching `dead-*`, `.scratch-*`, transient-file shapes). The cleanest ECHO disposition is a 3-step: **read 0-EOF** (Law 1) → **extract any cross-project invariants** not yet codified as LESSONs → **codify via LESSON entry + rm -f the source** (the LESSON captures the insights; the source is bloat). The disposition MUST happen BEFORE the file's content sizeof grows past 1 MB (the Truncation Shock threshold — `read_files` truncates at 20K tokens; 1.6 MB transcripts truncate before the agent can extract insights).
+
+**Permitted uses (no extension required):**
+- `find . -maxdepth 1 -type f -name 'session-ses_*' -o -name '*-session-trail*'` 2>/dev/null as a periodic hygiene scan (efficient: ≤1ms on typical repos).
+- Reading 0-EOF per ECHO Law 1 + `wc -c` size-signal to evaluate cleanup eligibility BEFORE any `rm -f`.
+- Extracting **cross-project invariants** (patterns applying to any ECHO-compliant project, e.g., "on-disk ECHO always wins" or "verify project-context before any tool-use") — NOT project-specific findings (those live in `dev/session-summaries/` or FIDs).
+- `rm -f session-ses_<id>.md` per LESSON-029 after LESSON codification (the LESSON is durable; the transcript is bloat).
+- Documenting the cleanup in `## Transient bloat removed` block in the active session summary (per LESSON-050 step 5).
+
+**Not permitted:**
+- Treating any prior-agent's session log as project ground truth (LESSON-008 attribution-only — the donor agent's understanding is a hypothesis, not a source).
+- `rm -f` any untracked workspace-root file WITHOUT prior read (ECHO Law 1 zero-tolerance).
+- Extracting NON-invariant content (donor agent's draft code, abandoned explorations) into LESSON entries — LESSONs codify invariants, not local narrations.
+- Speculatively bumping version files when adding a LESSON (LESSON-019 release-only-versioning discipline).
+
+**Pattern (canonical doctrine for stale-session transcript cleanup):**
+
+Compressed 4-step (extends LESSON-029 cleanup pipeline + LESSON-050 untracked-bloat-candidate discipline; this LESSON adds the **cross-project-invariant extraction** precondition):
+
+1. **Locate + size-signal + untracked-verify** (combined per LESSON-029 + LESSON-050): `find . -maxdepth 1 -type f \( -name 'session-ses_*' -o -name '*-session-trail*' -o -name 'ses_*' \) 2>/dev/null | head -n 5` + `wc -c <file>` (>100 KB → likely transcript; >1 MB → Truncation Shock risk) + `git ls-files --error-unmatch <file>` (must be untracked per LESSON-029 criteria).
+2. **Read 0-EOF** (ECHO Law 1) + **extract cross-project invariants ONLY** (project-specific findings live in `[dev/session-summaries/]` or FIDs, NOT in LESSONs; LESSONs codify invariants only).
+3. **Codify via LESSON if + only if invariant** (insert new entry above `<!-- Add new entries above this line -->` marker; format-conformance against LESSON-050/051/052/053 baseline) + `rm -f <file>` (LESSON captures insights; source is bloat per LESSON-029).
+4. **Document `## Transient bloat removed` block** in active session-summary (LESSON-050 step 5) + **re-run BOOT CHECK 3** (`bash scripts/lint-docs.sh && bash scripts/lint-defer.sh && cargo check --workspace` per LESSON-053) — invariant-addition must not regress the invariants.
+
+**Worked example (this session's recovery, 2026-07-15):** The untracked `[session-ses_09de.md]` at workspace root was 1,655,521 bytes (1.6 MB; Truncation Shock threshold exceeded). Step 1: located via `git ls-files --others --exclude-standard`. Step 2: read 0-EOF → extracted 2 cross-project invariants (on-disk ECHO always wins over system-prompt-embedded content; size-signal > 1 MB is a Truncation Shock indicator). Step 3: codified this LESSON-054 + `rm -f session-ses_09de.md`. Step 4: `## Transient bloat removed` documented + BOOT CHECK 3 re-run (LESSON-027 + LESSON-038 + cargo baseline all exit 0 per cascade-recovery verification). Source file gone; insights preserved.
+
+**Enforcement + tooling:**
+- A future FID-XXX could write `scripts/check-stale-transcripts.sh` that runs `find . -maxdepth 1 -type f -name 'session-*'` and reports candidates + recommends disposition per the doctrine above.
+- A future FID-XXX could write `scripts/check-lesson-marker-discipline.sh` that asserts `<!-- Add new entries above this line -->` is the last non-blank line in `dev/LEARNINGS.md`.
+
+**Cross-references:** ECHO.md §Cross-Agent Claim Rule (LESSON-008 attribution ≠ source); LESSON-029 (release.py pre-flight cleanup); LESSON-050 (untracked-bloat candidate pattern); LESSON-053 (the meta-LESSON — codifies the on-disk-wins + double-boot doctrine that this LESSON-054 generalizes to the stale-transcript case); FID-TEMPLATE §Closed footer (the movement pattern this LESSON doesn't apply to closed FIDs — those have `dev/fids/archive/` discipline already).
+
+**Anti-pattern documentation (this session's stale-transcript discovery, 2026-07-15):** The untracked `[session-ses_09de.md]` at workspace root was 1,655,521 bytes (1.6 MB) — significantly larger than the initial basher probe of 30,834 bytes had led the agent to believe (the 30,834 figure was a strlen-of-content subset; `wc -c` on the file shows the real size). When the prior agent (Tencent Hy3 + StepFun Step 3.7 Flash) ran in this codebase, it accumulated ~1.6 MB of session log including ECHO-contents, project-exploration bash output, and aborted `pnpm install` invocations — none of which had to live past the prior agent's session termination. Spencer ratified the "extract + rm" disposition per LESSON-029 + this LESSON's Pattern; the cross-project invariants are codified above; the source file will be `rm -f`'d in this session's Step 3 of the post-ratification flow.
+
+**Codified by:** Savant (2026-07-15) via Spencer's ratification of "extract + rm" for `session-ses_09de.md` under LESSON-029 cleanup + LESSON-008 Cross-Agent Claim Rule + the cleanup-discipline extension of LESSON-050.
+
 <!-- Add new entries above this line -->

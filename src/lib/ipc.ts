@@ -12,6 +12,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { setupMockIPC } from "./mock-ipc";
+import { fetchChangelog } from "./changelog";
 import type { ManifestStreamEvent } from "./manifest-mock";
 import type {
   AgentManifestPlan,
@@ -502,4 +503,116 @@ export async function triggerReflection(
     lensOverride: lensOverride ?? null,
     model: model ?? null,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// FID-028 — Scaffold 3 placeholder pages (changelog / faq / tune)
+// by wiring them to the real Rust engines (gateway's /api/changelog
+// + LlmParams::get_parameter_descriptors() + curated FAQ data).
+// See [`dev/fids/FID-2026-07-14-028-scaffold-changelog-faq-tune-pages.md`]
+// for the full FID body.
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * FID-028 (Spencer correction 2026-07-14) — Return the project's
+ * CHANGELOG.md content as a string. The source of truth is GitHub
+ * (see `CHANGELOG_GITHUB_RAW_URL` in `src/lib/changelog.ts`), NOT
+ * the local `CHANGELOG.md` file. End users downloading the app
+ * don't have the local file; the GitHub-hosted copy is canonical.
+ *
+ * The fetch is client-side (no IPC roundtrip needed) and goes
+ * through `src/lib/changelog.ts::fetchChangelog()`. The Tauri
+ * runtime could alternatively route through the gateway's
+ * `/api/changelog` endpoint (which reads the local file with
+ * `include_str!` fallback at [`crates/gateway/src/server.rs:1593`])
+ * — but per the correction, GitHub is the source of truth, so the
+ * client-side fetch is preferred.
+ */
+export async function getChangelog(): Promise<string> {
+  return fetchChangelog();
+}
+
+export type ParameterDescriptor = {
+  /** Snake-case field name (matches the gateway's SettingsUpdate keys). */
+  name: string;
+  /** UI-facing type label (f32 / string / optional string). */
+  type: "f32" | "string" | "option<string>";
+  /** Human-readable description (shown in the Tune page form). */
+  description: string;
+  /** Inclusive min for numeric params. */
+  min?: number;
+  /** Inclusive max for numeric params. */
+  max?: number;
+  /** Default value (from AiConfig::default()). */
+  default?: number | string | null;
+};
+
+/**
+ * FID-028 — Return the LLM parameter descriptors (the same shape
+ * the gateway's `/api/models` returns at runtime). The Tune page
+ * renders these as a tunable form. Ranges match the gateway's
+ * `settings_post_handler` clamp values (see
+ * `crates/gateway/src/server.rs:1110-1180`).
+ */
+export async function getParameterDescriptors(): Promise<ParameterDescriptor[]> {
+  return invoke<ParameterDescriptor[]>("get_parameter_descriptors");
+}
+
+/**
+ * FID-028 (Spencer revision 2026-07-14) — Return the 4 TRUE tuning
+ * parameter descriptors (filtered from `get_parameter_descriptors`).
+ * The Tune page uses this; model-selection fields (chat_model,
+ * manifestation_model, vision_model, provider, ollama_url) are
+ * configured on the Settings page. Per Spencer's verbatim: *"Fine
+ * tuning is for the actual model it's self, this page is not to
+ * change models."*
+ *
+ * Filter source: `src/lib/parameter-descriptors.ts::TUNING_FIELDS`
+ * (a `Set<string>` of the 4 sampling-knob names: temperature, top_p,
+ * frequency_penalty, presence_penalty). The full
+ * `get_parameter_descriptors` IPC command still returns all 9 (the
+ * gateway contract) for the future Settings wiring.
+ */
+export async function getTuningDescriptors(): Promise<ParameterDescriptor[]> {
+  return invoke<ParameterDescriptor[]>("get_tuning_descriptors");
+}
+
+/**
+ * FID-028 Revision 2 (Spencer 2026-07-14) — Persist the 4 tuning
+ * parameter values. The Tune page's Apply button dispatches this;
+ * the gateway's `POST /api/settings` (see
+ * `crates/gateway/src/server.rs:1110-1180`) clamps to the OpenAI
+ * ranges before persisting.
+ *
+ * Input: a `Record<string, number>` keyed by the gateway's
+ * snake_case param names (temperature, top_p, frequency_penalty,
+ * presence_penalty). Only the 4 known knobs are sent; unknown
+ * keys are dropped by the gateway's clamp step.
+ *
+ * The browser-preview mock stores the values in module-scoped
+ * state + returns `{ ok: true }`; the Tauri runtime would route
+ * through the gateway's `POST /api/settings` endpoint.
+ */
+export type SaveSettingsInput = Readonly<Record<string, number>>;
+
+export async function saveSettings(
+  values: SaveSettingsInput,
+): Promise<{ ok: boolean }> {
+  return invoke<{ ok: boolean }>("save_settings", { values });
+}
+
+export type FaqItem = {
+  question: string;
+  answer: string;
+};
+
+/**
+ * FID-028 — Return the curated FAQ items. No real FAQ module
+ * exists in the savant-orig (the 6-8 Q&A are grounded in the
+ * project's own CHANGELOG / README / LEARNINGS artifacts). The
+ * mock IPC serves the data directly; a real gateway FAQ endpoint
+ * is a follow-on FID.
+ */
+export async function getFaq(): Promise<FaqItem[]> {
+  return invoke<FaqItem[]>("get_faq");
 }

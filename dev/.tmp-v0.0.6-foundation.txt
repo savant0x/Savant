@@ -1,0 +1,184 @@
+chore(release-v0.0.6): foundation-release baseline (cascade-recovery cycle + WIP scaffold + version bump)
+
+Savant repo. The v0.0.6 release captures the post-cascade-recovery baseline
+before the architectural pivot work begins in v0.0.7+. Per master-FID-035
+§Build Order rule 'foundation → renderer → CLI → API swap → optional shell
+→ kernel abstractions IN ORDER', this baseline includes Layer 0 (gateway
+foundation, FID-031 partial-impl) + Layer 1 partial-scaffold (renderer
+pages + IPC layer) + the cascade-recovery artifacts (LESSON-053 +
+LESSON-054 + nova-channel + FID-031 doc-drift correction) + the
+version-bump canonicalization per LESSON-019 release-only-versioning.
+
+body paragraph 1 — recovery artifacts / cascade-recovery cycle closure
+
+The 2026-07-15 cascade-recovery cycle closed via Nova's inbox #1 + #2
+sign-off (per the deviations-channel established in this session):
+
+- LESSON-053 (Double-Boot at Session Start) + LESSON-054 (Stale-Session
+  Transcript Cleanup + Cross-Project-Invariant Extraction) codified in
+  dev/LEARNINGS.md. LESSON-053 prevents the 2026-07-15 ~22:50 ECHO-brake
+  cascade root cause (chat-history extrapolation working without ECHO.md
+  or session-summary read 0-EOF). LESSON-054 codifies the 4-step
+  disposition for untracked workspace-root session-ses_*.md files
+  (Locate + size-signal + untracked-verify, Read 0-EOF, Codify via
+  LESSON if invariant, Document + BOOT CHECK 3 re-run).
+
+- FID-031 doc-drift add-on entry appended to CHANGELOG.md ## [Unreleased]
+  per Spencer's verbatim 'Add-on in [Unreleased] FID-031 section;
+  Extract + rm' ratification. Non-destructive forward-correction of the
+  c34eea4 closing summary's '33 NEW `/v1/*` endpoints (32 REST + 1 SSE) ...
+  verified clean' overclaim. The on-disk reality per the verbatim
+  crates/gateway/tests/v1_routes_smoke_test.rs comment + our prior
+  audit is 1 real impl + 6 stubs returning 501 NotImplemented + 1 SSE
+  plumbing stub (8 endpoints of 33) — the differential is scheduled
+  for follow-on FIDs that consume this scaffold (FID-029, FID-030,
+  FID-031 §Step 9-11 endpoints layer in).
+
+- dev/nova/{inbox,outbox}/ cross-agent message-passing channel
+  established per LESSON-008 attribution-≠-source. The convention:
+  every cross-agent message cites source paths OR reproducible commands
+  + addresses sign-off items with PASS/PASS-WITH-COMMENTS/FAIL verdicts.
+  Two messages in flight at release time (outbox audit + corrections)
+  + two inbox responses (Nova's first + correction pass).
+
+- dev/session-summaries/2026-07-15-0222-echo-bootstrap.md captures the
+  boot-only session at session-start; 2026-07-15-0230-cascade-recovery.md
+  captures the cascade-recovery successor session per LESSON-053
+  doctrine.
+
+- 3 FID auto-archive discipline captures (FID-026 fixture, FID-028
+  scaffold-changelog-faq-tune-pages, FID-031 HTTP+WebSocket API) per
+  LESSON-052 FID auto-archive is a discipline not a `mv` event. All
+  Status: closed, archived to dev/fids/archive/.
+
+body paragraph 2 — FID-031 Layer 0 partial-impl
+
+Per master-FID-035 §Layered Build Architecture / Layer 0 / Provides for
+Layers 1-5, this delivers (a) HTTP runtime surface (the /v1/* 33 endpoint
+SCAFFOLD — see CHANGELOG add-on for actual delivery); (b) shared
+GatewayState; (c) rust-embed + ServeDir + ServeFile (the
+embedded-web feature flag); (d) SSE handler pattern; (e) auth +
+rate-limit + CORS layers.
+
+Files:
+
+- crates/gateway/Cargo.toml: axum 0.8 + tower + tokio + rust-embed
+  workspace deps
+- crates/gateway/src/lib.rs + server.rs: axum Router + the
+  embedded-web feature flag wiring
+- crates/gateway/src/handlers/mod.rs: re-exports the v1 submodule
+- crates/gateway/src/static_serve.rs: ServeDir + ServeFile fallback
+- crates/gateway/src/handlers/v1/*.rs (13 handler files): see CHANGELOG
+  add-on for the 1 + 6 + 1 = 8 endpoint delivery ratio
+- crates/gateway/tests/v1_routes_smoke_test.rs: 10 in-process smoke
+  tests covering the real impl + stub + SSE plumbing
+
+body paragraph 3 — Layer 1 dashboard scaffold WIP
+
+Per master-FID-035 §Layer 1a + §Layer 1b parallel execution, this delivers
+the renderer-side Layer 1 scaffold that FID-029 + FID-028 consume in
+their perfection loops:
+
+- src/app/{changelog,faq,icons,reflections,tune}/page.tsx: the 5 page
+  rewrites (changelog sourced from raw.githubusercontent.com per
+  Spencer's correction that GH is the changelog source-of-truth others
+  download; FAQ scaffolded; icons showcase; reflections editor with
+  R3F scene; fine-tuning HeroUI v3 compound components)
+- src/components/dashboard-shell.tsx: the LEFT nav sidebar shell
+- src/components/markdown-renderer.tsx: shared markdown surface
+- src/lib/ipc.ts: 22 Tauri-invoke wrappers (~618 LoC) — these get
+  swapped to fetch in FID-032 §Layer 3
+- src/lib/mock-ipc.ts: matching browser mock layer (~939 LoC)
+- src/lib/{changelog,faq-data,parameter-descriptors,tuning-data}.ts:
+  typed data companions for the 5 page rewrites
+- pnpm-lock.yaml: lockfile update from the new npm deps / scripts
+
+This is the deliberately-WIP state — v0.0.7+ commits complete specific
+FIDs on top of this scaffold (FID-029 Layer 1a wires chat persistence
+through 5 IPC commands; FID-028 Layer 1b wires memory graph viz
+through 2 gateway handlers + 7 npm deps).
+
+body paragraph 4 — version bump per LESSON-019
+
+5 version-bearing files bumped in lockstep per LESSON-019
+release-only-versioning (NEVER speculative — bound to release-cut):
+
+- VERSION: 0.0.5 → 0.0.6
+- package.json: "version": "0.0.5" → "0.0.6"
+- protocol.config.yaml: project.version: "0.0.5" → "0.0.6"
+- src-tauri/tauri.conf.json: "version": "0.0.5" → "0.0.6"
+- Cargo.toml: [workspace.package] version: "0.0.5" → "0.0.6"
+
+body paragraph 5 — CHANGELOG reorg per LESSON-019
+
+CHANGELOG.md structure preserved per Keep-a-Changelog + LESSON-019
+release-only-versioning:
+
+- The existing ## [Unreleased] section heading renamed to
+  ## [v0.0.6 — 2026-07-15] (preserves all FID-022 / FID-025 / FID-026
+  / FID-027 / FID-028 / FID-029 accumulated entries since v0.0.5 closed)
+- New empty ## [Unreleased] section added at the top of the file
+  for the v0.0.7+ cycle (FIDs do not migrate forward as
+  'uncommitted-planning-against-v0.0.6'; they always plan against the
+  next [Unreleased] release)
+
+body paragraph 6 — what v0.0.6 unlocks
+
+Per master-FID-035 §Build Order, the v0.0.7+ cascade is:
+
+1. FID-029 (Layer 1a): chat persistence — wires LsmStorageEngine +
+   MemoryEnclave via the existing Tauri IPC + 5 IPC commands +
+   5 chat sub-components + page rewrite (~1500 LoC across ~10 files)
+2. FID-028 (Layer 1b, parallel-eligible per master-FID-035): memory
+   graph viz — R3F + d3-force-3d + 2 new gateway handlers + 7 new npm
+   deps (~1500 LoC across ~10 NEW files + the deps)
+3. FID-030 (Layer 2): CLI scaffold — new crates/cli/ workspace member
+   + clap + port negotiator + signal handler (~1000 LoC across ~15 NEW
+   Rust files)
+4. FID-032 (Layer 3): api-client refactor — 22+5=27 Tauri invokes swap
+   to fetch + WebSocket (~800 LoC across ~5 NEW/MODIFIED TS files)
+5. FID-033 (Layer 4, optional): Tauri repackaging — src-tauri/ →
+   apps/tauri/ as Optional thin shell (~500 LoC across ~10 NEW+MODIFIED
+   files)
+6. FID-034 (Layer 5, LAST): Kernel trait adoption — 4 traits
+   (ModelProvider / Memory / Tool / Channel) + ~20 impl blocks +
+   orchestrator refactor (~600 LoC across ~10 NEW+MODIFIED files in
+   23 crates)
+
+Each subsequent commit closes its FID per LESSON-038 all-or-nothing
+discipline; the cascade chain terminates at v0.0.7 with the pivot
+complete (callable from `savant` CLI per the ZeroClaw pattern).
+
+footer — LESSONs + verification + cross-refs + codified-by
+
+LESSON-008 (Cross-Agent Claim Rule), LESSON-019 (release-only-versioning),
+LESSON-027 (doc-drift substring-match invariant), LESSON-029 (release.py
+clean-tree pre-flight), LESSON-030 (file-based commit/tag pattern),
+LESSON-031 (re-grep verification gate), LESSON-038 (no-unilateral-defer),
+LESSON-049 (verifier-pass + 4-field Q&A template convention),
+LESSON-050 (Untracked-Bloat Candidate), LESSON-051 (Explicit
+Scope-Ratify Escape Hatch), LESSON-052 (FID Auto-Archive Discipline),
+LESSON-053 (Double-Boot at Session Start), LESSON-054 (Stale-Session
+Transcript Cleanup), master-FID-035 (Strangler-Fig Tauri→CLI Architecture
+Build Order) — all codified or referenced.
+
+Boot invariants GREEN per the c34eea4 + post-session audit:
+  pnpm lint:docs → exit 0 (LESSON-027: 5 anchors + 1 cascade-prose)
+  pnpm lint:defer → exit 0 (LESSON-038: 0 violations)
+  cargo check --workspace → exit 0
+  pnpm tsc --noEmit → exit 0
+  bash scripts/release-check.sh → 3/3 gates PASS
+
+Cross-references:
+  - CHANGELOG.md ## [v0.0.6 — 2026-07-15] (new release entry)
+  - master-FID-035 (orchestration FID: Strangler-Fig Tauri→CLI Architecture)
+  - FID-022 (release:check tooling, pnpm lint:docs + lint:defer scripts)
+  - FID-024 (release:prep orchestrator: archive-fids + bump-version +
+    refresh-readme + clean-bloat + release.py chain)
+  - FID-026 (lint:defer discipline for LESSON-038 enforcement)
+  - FID-031 (Layer 0 foundation, archived to dev/fids/archive/)
+  - dev/LEARNINGS.md (LESSON-053, LESSON-054 entries)
+
+Codified by: Savant (2026-07-15) via LESSON-051 explicit scope-ratify
+authority + Spencer's 'push the release now that the tree is clean,
+then we proceed with the multi-FID work' directive.

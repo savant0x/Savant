@@ -287,7 +287,12 @@ pub async fn start_gateway(
 
     let cors = CorsLayer::new()
         .allow_origin(cors_origins)
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+        ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
     // Rate limiting: 20 requests per minute per IP
@@ -435,14 +440,10 @@ pub async fn start_gateway(
         .route(
             "/api/schedules/:id/run",
             axum::routing::post(crate::handlers::schedules::force_run_schedule),
-        )
-        .layer(axum::middleware::from_fn(request_id_middleware))
-        .layer(rate_limiter)
-        .layer(axum::middleware::from_fn_with_state(
-            dashboard_api_key,
-            crate::auth::http_middleware::auth_middleware,
-        ))
-        .layer(cors);
+        );
+        // NOTE: middleware layers (request_id, rate_limiter, auth, cors) are
+        // applied to the main `app` router AFTER all merges (see below), so
+        // the v1 routes also get the same middleware as the api routes.
 
     // Populate system.agents in shared memory on startup so that
     // route_chat_message doesn't reject every user message with
@@ -498,10 +499,30 @@ pub async fn start_gateway(
         );
     }
 
+    // Mount v1 routes at `/v1/*` (the canonical Tauri-mapped + dashboard-`useCli`
+    // surface per FID-031). The v1_routes() sub-router declares paths without
+    // the `/v1` prefix; `.nest("/v1", ...)` adds it here so the public surface
+    // is `/v1/health`, `/v1/changelog`, etc.
     let app = Router::new()
         .merge(ws_routes)
         .merge(api_routes)
+        .nest("/v1", crate::handlers::v1::v1_routes())
+        // Apply the API middleware stack to the main app router (covers
+        // both /api/* and /v1/* routes). Applied AFTER the v1 merge so
+        // v1 endpoints get the same CORS, rate limiting, and auth as /api/*.
+        .layer(axum::middleware::from_fn(request_id_middleware))
+        .layer(rate_limiter)
+        .layer(axum::middleware::from_fn_with_state(
+            dashboard_api_key,
+            crate::auth::http_middleware::auth_middleware,
+        ))
+        .layer(cors)
         .with_state(state);
+
+    // Apply the static dashboard fallback (embedded-web feature flag).
+    // When the feature is off, this is a no-op; the dev workflow uses
+    // `next dev` to serve the dashboard separately.
+    let app = crate::static_serve::append_fallback(app);
 
     tracing::info!("Gateway server listening on {}", addr);
 

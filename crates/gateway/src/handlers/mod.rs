@@ -53,6 +53,7 @@ pub mod schedules;
 pub mod setup;
 pub mod skills;
 pub mod status;
+pub mod v1;
 
 /// Request payload for the OAuth store endpoint.
 #[derive(serde::Deserialize)]

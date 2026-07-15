@@ -12,6 +12,17 @@
 // flush against the rail's right border so the eye reads it as a
 // "you are here" marker on the inside-right of the column.
 //
+// Iconography (2026-07-14 — phase-2 sweep per FID-027 Hover-pack install):
+//   - Nav-row icons render from `@/components/icons` (Hover pack, animated
+//     client components). The `icon` field on each nav item is a key into
+//     `iconRegistry` (NOT a FontAwesome className). Best-fit mappings for
+//     the 4 ambiguous icons (evolution, changelog, health, theme-sun) are
+//     proposed defaults — tune per visual review at /icons §Dashboard
+//     Mapping Candidates.
+//   - Left-rail footer theme toggle + fold chevrons + right-inspector
+//     icons similarly migrated from `fas fa-...` to named imports from
+//     the Hover pack. Animated-on-hover is the upgrade; semantics preserved.
+//
 // Theme: dark-first. The <html> element ships with data-theme="dark"
 // (server-rendered in layout.tsx). The footer theme toggle flips the
 // html attribute client-side; HeroUI v3 swaps design tokens automatically.
@@ -19,58 +30,70 @@
 // Logo: /img/logo.png (Next.js serves public/* at /).
 // Children: each page provides its own center content below the header.
 
-import { ReactNode, useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ForwardRefExoticComponent,
+  type PropsWithoutRef,
+  type ReactNode,
+  type RefAttributes,
+} from "react";
+import type { AnimatedIconHandle, AnimatedIconProps } from "@/components/icons/types";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Separator } from "@heroui/react";
 import { listProfiles, type ProfileSummary } from "@/lib/ipc";
 import { logger } from "@/lib/logger";
+import {
+  iconRegistry,
+  BulbSvg,
+  MoonIcon,
+  ArrowNarrowLeftIcon,
+  ArrowNarrowRightIcon,
+  MagnifierIcon,
+  LockIcon,
+  HistoryCircleIcon,
+  InfoCircleIcon,
+} from "@/components/icons";
 
 type Theme = "dark" | "light";
 
-// ─── Nav items with hrefs (Savant-backup convention) ──────────────────
+// ForwardRef-typed component for the nav icons. The iconRegistry
+// returns `ComponentType<AnimatedIconProps>` (no ref), so we need a
+// separate type to attach a ref to call the imperative
+// startAnimation() / stopAnimation() methods on each nav icon (see
+// the onMouseEnter/onMouseLeave wiring on each <Link> below; this
+// makes the menu TEXT hover trigger the icon's animation, not just
+// hovering the SVG itself).
+type NavIconComponent = ForwardRefExoticComponent<
+  PropsWithoutRef<AnimatedIconProps> & RefAttributes<AnimatedIconHandle>
+>;
+
+// ─── Nav items (Savant-backup convention) ──────────────────────────────
+// `icon` is a key into `iconRegistry` (273 entries from the Hover pack).
 // Source order is conceptual (default-first, feature priority). The
 // sidebar sorts alphabetically at runtime when building NAV_SECTIONS,
 // so future agents can drop a new item anywhere in either array and the
 // display order stays correct without a manual re-sort.
 const SYSTEM_NAV_ITEMS = [
-  { id: "chat", href: "/chat", label: "Chat with Savant", icon: "fa-message" },
-  {
-    id: "swarm",
-    href: "/",
-    label: "Swarm Broadcast",
-    icon: "fa-tower-broadcast",
-  },
-  {
-    id: "manifest",
-    href: "/manifest",
-    label: "Manifest Soul",
-    icon: "fa-wand-magic-sparkles",
-  },
+  { id: "chat", href: "/chat", label: "Chat with Savant", icon: "MessageCircleIcon" },
+  { id: "swarm", href: "/", label: "Swarm Broadcast", icon: "RadioIcon" },
+  { id: "manifest", href: "/manifest", label: "Manifest Soul", icon: "SparklesIcon" },
 ] as const;
 
 const PAGE_NAV_ITEMS = [
-  { id: "evolution", href: "/evolution", label: "Evolution", icon: "fa-dna" },
-  { id: "tune", href: "/tune", label: "Fine-Tuning", icon: "fa-sliders" },
-  {
-    id: "changelog",
-    href: "/changelog",
-    label: "Changelog",
-    icon: "fa-clipboard-list",
-  },
-  { id: "settings", href: "/settings", label: "Settings", icon: "fa-gear" },
-  {
-    id: "marketplace",
-    href: "/marketplace",
-    label: "Marketplace",
-    icon: "fa-store",
-  },
-  { id: "mcp", href: "/mcp", label: "MCP", icon: "fa-plug" },
-  { id: "health", href: "/health", label: "Health", icon: "fa-heart-pulse" },
-  { id: "faq", href: "/faq", label: "FAQ", icon: "fa-circle-question" },
-  { id: "browser", href: "/browser", label: "Browser", icon: "fa-globe" },
+  { id: "evolution", href: "/evolution", label: "Evolution", icon: "DinoIcon" },
+  { id: "tune", href: "/tune", label: "Fine-Tuning", icon: "SlidersHorizontalIcon" },
+  { id: "changelog", href: "/changelog", label: "Changelog", icon: "LibraryIcon" },
+  { id: "settings", href: "/settings", label: "Settings", icon: "GearIcon" },
+  { id: "marketplace", href: "/marketplace", label: "Marketplace", icon: "CartIcon" },
+  { id: "mcp", href: "/mcp", label: "MCP", icon: "PlugConnectedIcon" },
+  { id: "health", href: "/health", label: "Health", icon: "ScanHeartIcon" },
+  { id: "faq", href: "/faq", label: "FAQ", icon: "QuestionMark" },
+  { id: "browser", href: "/browser", label: "Browser", icon: "GlobeIcon" },
   // FID-017 — Reflections viewer (12-lens rotation + REFLECTIONS.md timeline)
-  { id: "reflections", href: "/reflections", label: "Reflections", icon: "fa-brain" },
+  { id: "reflections", href: "/reflections", label: "Reflections", icon: "BrainCircuitIcon" },
 ] as const;
 
 // Display order: items are sorted by label so the sidebar reads
@@ -90,6 +113,65 @@ const NAV_SECTIONS = [
 
 const ALL_NAV_ITEMS = [...SYSTEM_NAV_ITEMS, ...PAGE_NAV_ITEMS];
 
+// ─── FoldToggleButton (extracted 2026-07-14) ──────────────────────────
+// Single source-of-truth for the fold chevron on BOTH rails (left rail
+// + right inspector). Renders the same ArrowNarrowRightIcon in both
+// positions; CSS `transform: scaleX(-1)` mirrors the arrow on the
+// right side so the design language is identical across rails. The
+// icon orientation encodes the action ("expand into screen" /
+// "collapse toward edge") consistently. Position (`-right-3` vs
+// `-left-3`) is derived from the `side` prop.
+function FoldToggleButton({
+  side,
+  isCollapsed,
+  onToggle,
+  label,
+}: {
+  side: "left" | "right";
+  isCollapsed: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  // Icon selection by (side, isCollapsed). Both icons share the same
+  // SVG path; ArrowNarrowRightIcon is the canonical right-pointing
+  // variant, ArrowNarrowLeftIcon is its left-pointing mirror. We
+  // use the dedicated component instead of a CSS scaleX(-1)
+  // transform: the dedicated component renders the SVG without the
+  // inline-flex parent shift that the transform introduced (per
+  // Spencer's 2026-07-14 "right sidebar icon is contained" feedback,
+  // the transform made the right side feel stuck inside the
+  // inspector gradient rather than protruding as a tab).
+  const Icon =
+    side === "left"
+      ? isCollapsed
+        ? ArrowNarrowRightIcon
+        : ArrowNarrowLeftIcon
+      : isCollapsed
+        ? ArrowNarrowLeftIcon
+        : ArrowNarrowRightIcon;
+  return (
+    <button
+      onClick={onToggle}
+      aria-label={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+      title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+      className={[
+        "absolute top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-default/60 bg-surface text-muted shadow-md transition-all duration-200 hover:scale-110 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        side === "left" ? "-right-3" : "-left-3",
+      ].join(" ")}
+    >
+      {/*
+        `aria-hidden` is intentionally NOT passed here: the Hover-pack
+        icon source destructures { size, color, strokeWidth, className }
+        and drops everything else, so any `aria-hidden` we set would
+        silently disappear at runtime. The parent <button>'s aria-label
+        ("Expand menu" / "Collapse inspector") is the source of truth
+        for assistive tech; the icon is decorative inline SVG.
+      */}
+      <Icon size={16} />
+    </button>
+  );
+}
+
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // Derive active id from the URL: "/" → "swarm", "/evolution" → "evolution", etc.
@@ -102,6 +184,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   // convention as the left rail (240px ↔ 64px → 320px ↔ 48px).
   // Persisted per-mount only; resets on refresh to match the left rail.
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  // Per-item ref to each nav icon's imperative handle. The Hover-pack
+  // icon's `onHoverStart` only fires when the cursor is over the SVG
+  // itself; we extend that to the surrounding <Link>'s onMouseEnter
+  // so hovering the menu text also triggers the icon's hover
+  // animation. Map keyed by `id` so each Link can look up its own
+  // handle without per-render prop threading. Entries are added on
+  // mount + removed on unmount via the ref callback.
+  const navIconRefs = useRef<Map<string, AnimatedIconHandle>>(new Map());
 
   useEffect(() => {
     const current = (document.documentElement.dataset.theme as Theme) || "dark";
@@ -239,6 +329,35 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               )}
               {section.items.map(({ id, href, label, icon }) => {
                 const active = activeId === id;
+                // Hover-pack icon: animated client component from
+                // src/components/icons. The `icon` field is a key into
+                // iconRegistry (NOT a FontAwesome class string). See
+                // /icons page's mapping-candidates section for the
+                // full candidate table.
+                // CHECK: tsconfig.json noUncheckedIndexedAccess (currently
+                // OFF; would require `iconRegistry[icon]!` or `?`+fallback
+                // if the strict flag is ever flipped).
+                //
+                // Cast to the ref-typed component (iconRegistry's
+                // IconComponent is `ComponentType<AnimatedIconProps>`
+                // which strips the ref type). The ref exposes
+                // startAnimation() / stopAnimation() via
+                // useImperativeHandle, which the parent <Link>'s
+                // onMouseEnter / onMouseLeave handlers below call so
+                // hovering the menu text (not just the icon) triggers
+                // the icon's hover animation. The aria-hidden prop is
+                // intentionally NOT passed: the icon's destructure
+                // strips it (see FoldToggleButton's note), and the
+                // parent <Link>'s aria-label is the source of truth
+                // for AT.
+                const NavIcon = iconRegistry[icon] as NavIconComponent;
+                const setIconRef = (handle: AnimatedIconHandle | null): void => {
+                  if (handle) {
+                    navIconRefs.current.set(id, handle);
+                  } else {
+                    navIconRefs.current.delete(id);
+                  }
+                };
                 return (
                   <Link
                     key={id}
@@ -246,6 +365,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     title={label}
                     aria-label={label}
                     aria-current={active ? "page" : undefined}
+                    onMouseEnter={() =>
+                      navIconRefs.current.get(id)?.startAnimation()
+                    }
+                    onMouseLeave={() =>
+                      navIconRefs.current.get(id)?.stopAnimation()
+                    }
                     className={[
                       "group relative flex items-center gap-3 rounded-md px-3 py-2 font-mono text-[11px] uppercase tracking-[0.15em] transition-all duration-200 no-underline",
                       collapsed ? "justify-center" : "justify-start",
@@ -254,9 +379,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                         : "border-r-2 border-transparent text-muted hover:bg-surface-secondary/40 hover:text-foreground",
                     ].join(" ")}
                   >
-                    <i
-                      className={`fas ${icon} text-base shrink-0`}
-                      aria-hidden
+                    <NavIcon
+                      ref={setIconRef}
+                      size={18}
+                      className="shrink-0"
                     />
                     {!collapsed && <span className="truncate">{label}</span>}
                   </Link>
@@ -282,10 +408,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 aria-label="Toggle theme"
                 className="flex h-6 w-6 items-center justify-center rounded-md border border-default/40 text-muted transition-colors hover:border-accent hover:text-accent"
               >
-                <i
-                  className={`${theme === "dark" ? "fa-sun" : "fa-moon"} fas text-xs`}
-                  aria-hidden
-                />
+                {/* Collapsed: icon shows NEXT ACTION. Dark→light = BulbSvg
+                    (lightbulb); light→dark = MoonIcon. */}
+                {theme === "dark" ? (
+                  <BulbSvg size={14} aria-hidden />
+                ) : (
+                  <MoonIcon size={14} aria-hidden />
+                )}
               </button>
             </div>
           ) : (
@@ -304,11 +433,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 aria-label="Toggle theme"
               >
                 <span>Theme</span>
+                {/* Expanded: icon shows CURRENT theme visualization.
+                    Dark = MoonIcon; light = BulbSvg. */}
                 <span className="flex items-center gap-1.5 text-foreground">
-                  <i
-                    className={`${theme === "dark" ? "fa-moon" : "fa-sun"} fas text-xs`}
-                    aria-hidden
-                  />
+                  {theme === "dark" ? (
+                    <MoonIcon size={14} aria-hidden />
+                  ) : (
+                    <BulbSvg size={14} aria-hidden />
+                  )}
                   <span>{theme === "dark" ? "Dark" : "Light"}</span>
                 </span>
               </button>
@@ -316,18 +448,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           )}
         </footer>
 
-        {/* Fold toggle — middle of the right edge */}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? "Expand menu" : "Collapse menu"}
-          title={collapsed ? "Expand menu" : "Collapse menu"}
-          className="absolute top-1/2 -right-3 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-default/60 bg-surface text-muted shadow-md transition-all duration-200 hover:scale-110 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <i
-            className={`${collapsed ? "fa-chevron-right" : "fa-chevron-left"} fas text-sm`}
-            aria-hidden
-          />
-        </button>
+        {/* Fold toggle — middle of the right edge. Extracted to the
+            shared <FoldToggleButton side="left" /> for parity with
+            the right inspector fold (mirrored via CSS scaleX). */}
+        <FoldToggleButton
+          side="left"
+          isCollapsed={collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+          label="menu"
+        />
       </aside>
 
       {/* ─── Center Canvas ─────────────────────────────────────────── */}
@@ -354,32 +483,42 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <aside
         className={
           rightCollapsed
-            ? "relative flex flex-col items-center border-l border-default/60 bg-gradient-to-b from-surface/30 to-surface/10"
-            : "relative flex flex-col overflow-auto border-l border-default/60 bg-gradient-to-b from-surface/40 to-surface/20"
+      ? "relative flex flex-col items-center border-l border-default/60 bg-gradient-to-b from-surface/30 to-surface/10"
+      : "relative flex flex-col border-l border-default/60 bg-gradient-to-b from-surface/40 to-surface/20"
         }
       >
         <header className="flex w-full items-center justify-center border-b border-default/60 p-4">
           {rightCollapsed ? (
-            <i
-              className="fas fa-magnifying-glass-chart text-base text-muted"
-              aria-hidden
-              title="Inspector"
-            />
+            // Hover-pack MagnifierIcon's AnimatedIconProps does NOT
+            // expose a `title` prop (parent class for SVG aria attrs is
+            // SVGAttributes, but the icon component strips non-standard
+            // SVG props). The tooltip goes on the wrapping <span>;
+            // aria-label on an empty parent is redundant when the child
+            // is `aria-hidden` decorative.
+            // CHECK: tsconfig.json noUncheckedIndexedAccess (currently
+            // OFF; flip → `iconRegistry[icon]` becomes `undefined` here).
+            <span title="Inspector">
+              <MagnifierIcon size={18} className="text-muted" aria-hidden />
+            </span>
           ) : (
             <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-muted">
               Inspector
             </p>
           )}
         </header>
-        {!rightCollapsed && <Separator />}
         {!rightCollapsed && (
-          <>
+          // 2026-07-14 fix: the aside's `overflow-auto` was clipping
+          // the absolutely-positioned <FoldToggleButton side="right">
+          // at `-left-3`, hiding its 12px edge overlay (per Spencer's
+          // "icon is contained within the sidebar" feedback). Mirrors
+          // the left rail's pattern: keep overflow on the INNER
+          // content wrapper, not the aside itself, so the fold
+          // button's overflow-relative position is preserved.
+          <div className="flex-1 overflow-y-auto">
+            <Separator />
             <section className="p-4">
               <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-                <i
-                  className="fas fa-vault text-[10px] text-accent"
-                  aria-hidden
-                />
+                <LockIcon size={10} className="text-accent" aria-hidden />
                 Vault
               </h3>
               {vaultError ? (
@@ -392,7 +531,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 </p>
               ) : profiles.length === 0 ? (
                 <p className="flex items-center gap-2 text-sm text-muted">
-                  <i className="fas fa-circle-info text-xs" aria-hidden />
+                  <InfoCircleIcon size={12} aria-hidden />
                   No profiles configured.
                 </p>
               ) : (
@@ -416,18 +555,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <Separator />
             <section className="p-4">
               <h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-                <i
-                  className="fas fa-wave-square text-[10px] text-accent"
+                <HistoryCircleIcon
+                  size={10}
+                  className="text-accent"
                   aria-hidden
                 />
                 Activity
               </h3>
               <p className="flex items-center gap-2 text-sm text-muted">
-                <i className="fas fa-circle-info text-xs" aria-hidden />
+                <InfoCircleIcon size={12} aria-hidden />
                 No recent activity.
               </p>
             </section>
-          </>
+          </div>
         )}
         {rightCollapsed && (
           <div className="flex flex-1 flex-col items-center justify-end gap-3 p-3">
@@ -439,21 +579,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        {/* Fold toggle — middle of the left edge (mirror of left rail).
-            Toggles the 320px ↔ 48px collapse; same icon convention. */}
-        <button
-          onClick={() => setRightCollapsed((c) => !c)}
-          aria-label={
-            rightCollapsed ? "Expand inspector" : "Collapse inspector"
-          }
-          title={rightCollapsed ? "Expand inspector" : "Collapse inspector"}
-          className="absolute top-1/2 -left-3 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-default/60 bg-surface text-muted shadow-md transition-all duration-200 hover:scale-110 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <i
-            className={`${rightCollapsed ? "fa-chevron-left" : "fa-chevron-right"} fas text-sm`}
-            aria-hidden
-          />
-        </button>
+        {/* Fold toggle — middle of the left edge. Shared
+            <FoldToggleButton side="right" /> mirrors the arrow via
+            CSS scaleX(-1) so the visual matches the left rail. */}
+        <FoldToggleButton
+          side="right"
+          isCollapsed={rightCollapsed}
+          onToggle={() => setRightCollapsed((c) => !c)}
+          label="inspector"
+        />
       </aside>
     </div>
   );

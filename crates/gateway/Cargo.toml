@@ -19,7 +19,7 @@ serde_json = { workspace = true }
 ed25519-dalek = "2.0"
 rand = { workspace = true }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "cors", "limit"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "limit", "fs"] }
 tracing = { workspace = true }
 futures = "0.3"
 async-stream = "0.3"
@@ -33,6 +33,23 @@ blake3 = "1.5"
 chrono = { workspace = true }
 serde_yaml = "0.9.34"
 tower_governor = "0.4"
+thiserror = "1"
+rust-embed = { version = "8", optional = true }
+
+[features]
+# Opt-in: bundle the static dashboard export into the gateway binary
+# (rust-embed compiles web/dist/* into the binary at build time).
+# Default builds are API-only; the CLI dev workflow uses `next dev` separately.
+embedded-web = ["dep:rust-embed"]
+
+[dev-dependencies]
+# The lib uses `tower = "0.4"` (required by `tower_governor = "0.4"`),
+# but `axum 0.7` + `tower-http 0.5` transitively pull in `tower 0.5`,
+# which is the version that provides `ServiceExt::oneshot` for
+# `axum::Router` (the in-process test pattern). Renamed alias
+# (per Cargo's overlapping-name resolution rules) lets the integration
+# test import the 0.5 trait while the lib keeps the 0.4 trait.
+tower_0_5 = { package = "tower", version = "0.5" }
 
 [lints]
 workspace = true
