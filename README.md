@@ -340,7 +340,7 @@ pnpm verify:fix                  # LESSON-031 dual-check re-grep pattern
 | v0.0.4  |   1   | SHIPPED  | Rust core restored (FID-016) + Reflections Viewer (FID-017) + lib rename (FID-016r2) + License MIT→Apache 2.0       |
 | v0.0.5  |   1   | SHIPPED  | Bundle identifier + Cargo crate/binary alignment to `savant` brand                                                |
 | v0.0.6  |   1   | SHIPPED  | Pre-pivot baseline + git release tooling (FID-022 LESSON-027/028/029/030/031 scripts) + cascade-recovery cycle codification (LESSON-053 + LESSON-054) + FID-031 gateway expansion foundation (Layer 0) + README auto-update pipeline |
-| v0.0.7  |   1+  | PLANNED  | Strangler-fig Layer 1a (FID-029 chat persistence) + Layer 2 (FID-030 CLI runtime host) + Layer 3 (FID-032 api-client swap) + Layer 4 (FID-033 Tauri repackaging) + Layer 5 (FID-034 kernel trait adoption) |
+| v0.0.7  |   1+  | IN PROGRESS  | **Foundation landed (8512f78, 2026-07-15):** LESSON-059 codification + clean reinstall + FID-029 §Step 1 sibling-collection pivot. Next: Layer 1a §Step 2 (FID-029 renderer IPC wrappers) + Layer 2 (FID-030 CLI runtime host) + Layer 3 (FID-032 api-client swap) + Layer 4 (FID-033 Tauri repackaging) + Layer 5 (FID-034 kernel trait adoption). |
 | v0.1.0  |   2   | PLANNED  | Trigger bus + hybrid tick + SQLite WAL + dual-loop init + Rust module split (trigger/, state/, cognitive/)         |
 | v0.2.0  |   3   | PLANNED  | Tiered inference (fast + slow reflection) + observability + 16-provider chain                                      |
 | v0.3.0  |   4   | PLANNED  | Mandatory Security Scanner + Two-Tier Agent System + Distributed Memory Substrate + Channels                      |
