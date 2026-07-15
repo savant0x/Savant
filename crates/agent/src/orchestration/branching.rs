@@ -310,7 +310,6 @@ impl HyperCausalEngine {
 }
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use async_trait::async_trait;

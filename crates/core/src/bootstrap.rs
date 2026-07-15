@@ -748,7 +748,7 @@ impl BootstrapReconciler {
 
         let mut memory_mb = 64u32; // default
         // Try to parse MB from the claim description
-        if let Some(mb_str) = claim.description.split(|c| c == ' ' || c == '(' || c == ')')
+        if let Some(mb_str) = claim.description.split([' ', '(', ')'])
             .find(|w| w.ends_with("MB") && w.len() > 2)
         {
             if let Ok(mb) = mb_str.trim_end_matches("MB").parse::<u32>() {

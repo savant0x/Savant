@@ -37,6 +37,16 @@ description = "Savant AI desktop shell (Renderer-first rebuild, Rust core restor
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
+# FID-036 anchor — see dev/fids/FID-2026-07-15-036-clippy-policy-refinement.md
+# Note: workspace-level `[workspace.lints.clippy]` entries LIVE in `clippy.toml`
+# (not here). Cargo's `[workspace.lints.clippy]` table accepts `level` for clippy
+# lints but DOES NOT process `except-cfg` (Rust 1.81+ lint-table-cfg for `except-cfg`
+# works for `[lints.rust]` only). Empirically (this FID cycle): every crate emitted
+# `warning: unused manifest key: lints.clippy.expect_used.except-cfg` when the
+# `except-cfg = ["test"]` syntax was placed here. The correct home is
+# `clippy.toml::[lints.clippy]` with the `allow-in-test = true` subkey (added
+# in clippy 0.1.78; the project has clippy 0.1.94).
+
 [workspace.dependencies]
 # Serialization, async, errors
 serde = { version = "1.0", features = ["derive"] }

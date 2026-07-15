@@ -339,7 +339,6 @@ fn hex_encode_32(bytes: &[u8; 32]) -> String {
 }
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

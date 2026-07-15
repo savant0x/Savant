@@ -310,32 +310,3 @@ impl HyperCausalEngine {
 }
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
-mod tests {
-    use super::*;
-    use async_trait::async_trait;
-    use serde_json::json;
-
-    struct MockTool;
-    #[async_trait]
-    impl Tool for MockTool {
-        fn name(&self) -> &str {
-            "mock_tool"
-        }
-        fn description(&self) -> &str {
-            "mock"
-        }
-        async fn execute(&self, _payload: Value) -> Result<String, SavantError> {
-            Ok("Success".to_string())
-        }
-    }
-
-    #[tokio::test]
-    async fn test_hcc_collapse() {
-        let engine = HyperCausalEngine::new(2);
-        let tool = Arc::new(MockTool);
-        let res = engine.execute_speculative(tool, json!({})).await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), "Success");
-    }
-}

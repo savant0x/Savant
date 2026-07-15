@@ -1834,7 +1834,7 @@ CRITICAL REQUIREMENTS:
 
     // For tiers that need grounding (Grounded, Scaffolded, Aspirational),
     // inject system context YAML at the top of the system prompt.
-    let system_prompt = if bootstrap_tier.map_or(true, |t| t != BootstrapTier::PureGeneration) {
+    let system_prompt = if bootstrap_tier.is_none_or(|t| t != BootstrapTier::PureGeneration) {
         let ctx = gather_system_context(config);
         let yaml = serde_yaml::to_string(&ctx).unwrap_or_default();
         let context_block = format!(

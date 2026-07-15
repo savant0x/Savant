@@ -170,7 +170,6 @@ impl Default for EnsembleRouter {
 }
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

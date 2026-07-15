@@ -585,14 +585,3 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    #[expect(clippy::disallowed_methods)] // Kani formal verifier requires Linux/macOS
-    async fn test_ultimate_synthesis_flow() {
-        let tmp = tempdir().unwrap();
-        let synth = SovereignSynthesizer::new(tmp.path().to_owned());
-
-        let res = synth
-            .synthesize_skill("swarm_gossip", "Implement low-latency IPC frames")
-            .await;
-        assert!(res.is_ok());
-    }
-}

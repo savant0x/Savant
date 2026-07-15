@@ -1,12 +1,12 @@
 //! Smoke test for the FID-025 Skills + Sandbox IPC surface.
 //!
 //! Exercises ONLY the in-process `savant_shell::skills::SkillExecutionRegistry`
-//! + the `cfg!(test)`-gated stubs of the 5 IPC façade functions. The
-//! production code paths of `list_skills` / `describe_skill` / `execute_skill`
-//! (which require Docker / WASM binaries + real SKILL.md files on disk)
-//! are NOT exercised here — they are gated behind `cfg!(test)` returns
-//! that allow the test to run on a clean Windows checkout without
-//! external setup.
+//! plus the `cfg!(test)`-gated stubs of the 5 IPC façade functions. The
+//! production code paths of `list_skills`, `describe_skill`, and
+//! `execute_skill` require Docker / WASM binaries + real SKILL.md files
+//! on disk, so they are NOT exercised here and are gated behind
+//! `cfg!(test)` returns that allow the test to run on a clean Windows
+//! checkout without external setup.
 //!
 //! Verifies the IPC boundary contract:
 //! - registry starts empty (no auto-registration)

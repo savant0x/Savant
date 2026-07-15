@@ -5,10 +5,6 @@ use aho_corasick::AhoCorasick;
 use std::sync::{Arc, LazyLock};
 
 /// Empty Aho-Corasick automaton used as fallback when pattern compilation fails.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "empty string pattern is a known-valid Aho-Corasick input"
-)]
 static EMPTY_AC: LazyLock<AhoCorasick> =
     LazyLock::new(|| AhoCorasick::new([""]).expect("empty pattern is always valid"));
 

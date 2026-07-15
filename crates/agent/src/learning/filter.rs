@@ -9,10 +9,6 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 /// Fabrication patterns — claims about events the agent did not observe.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "hardcoded regex patterns validated at compile time"
-)]
 static FABRICATION_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(?i)\byou\s+(told|said|mentioned|shared|explained)\s+me\b")
@@ -29,10 +25,6 @@ static FABRICATION_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 });
 
 /// Environmental grounding indicators — word-boundary matched.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "hardcoded regex patterns validated at compile time"
-)]
 static ENVIRONMENTAL_GROUNDING: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(?i)\bgit\b").expect("ENVIRONMENTAL_GROUNDING[0]: static regex is valid"),
@@ -63,10 +55,6 @@ static ENVIRONMENTAL_GROUNDING: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 });
 
 /// Introspective grounding indicators — allow genuine emergent expression.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "hardcoded regex patterns validated at compile time"
-)]
 static INTROSPECTIVE_GROUNDING: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new(r"(?i)\bI\s+(feel|wonder|notice|observe|think|sense|realize|recognize)\b")
@@ -95,10 +83,6 @@ static INTROSPECTIVE_GROUNDING: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 });
 
 /// Engineering/architectural grounding — development insights, code, design, debugging.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "hardcoded regex patterns validated at compile time"
-)]
 static ENGINEERING_GROUNDING: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         // Code-level references

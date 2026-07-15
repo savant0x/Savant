@@ -18,7 +18,6 @@
 //! from_filename with an explicit path), so the test exercises the same
 //! code path semantically.
 
-use savant_shell;
 use savant_vault::master_key;
 
 #[test]

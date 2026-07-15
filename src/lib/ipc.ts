@@ -427,6 +427,68 @@ export async function manifestSoulStream(
 }
 
 // ─────────────────────────────────────────────────────────────────
+// FID-029 §Step 2 — Chat Persistence IPC wrappers
+//
+// Renderer-side TypeScript surface for the 5 chat-persistence
+// commands. The Tauri-runtime DAEMON commands live at
+// `src-tauri/src/lib.rs::FID-029 Phase-4` (deferred to FID-032 per
+// master FID-035 §Layered Build Order Layer 3; for v0.0.8 the
+// browser-preview mock in `src/lib/mock-ipc.ts` is the active path).
+//
+// Returns `Promise<T>` per FID-029 §Missed Questions #11 — the IPC
+// bridge turns `Err(String)` into a thrown Promise, so the renderer
+// catches with `try { await listChatSessions() } catch (e) {...}`.
+// The renderer does NOT use `{ ok: false, error: "..." }` return
+// shapes.
+// ─────────────────────────────────────────────────────────────────
+
+import type {
+	ChatMessage,
+	ChatSearchResult,
+	ChatSession,
+} from "@/lib/chat-data";
+
+export async function listChatSessions(): Promise<ChatSession[]> {
+	return invoke<ChatSession[]>("list_chat_sessions");
+}
+
+export async function loadChatHistory(
+	sessionId: string,
+	limit = 100,
+): Promise<ChatMessage[]> {
+	return invoke<ChatMessage[]>("load_chat_history", {
+		sessionId,
+		limit,
+	});
+}
+
+export async function persistChatTurn(
+	sessionId: string,
+	userMessage: ChatMessage,
+	assistantMessage: ChatMessage,
+): Promise<void> {
+	return invoke<void>("persist_chat_turn", {
+		sessionId,
+		userMessage,
+		assistantMessage,
+	});
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+	return invoke<void>("delete_chat_session", { sessionId });
+}
+
+export async function searchChatHistory(
+	query: string,
+	limit = 50,
+): Promise<ChatSearchResult[]> {
+	return invoke<ChatSearchResult[]>("search_chat_history", {
+		query,
+		limit,
+	});
+}
+
+// ─────────────────────────────────────────────────────────────────
 // FID-017 — Inner monologue IPC wrappers
 //
 // Mirrors the savant-orig `crates/agent/src/{pulse,consciousness,learning}/`

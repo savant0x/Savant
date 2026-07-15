@@ -1157,23 +1157,18 @@ pub struct SkillChainStep {
 /// - `Scaffolded`: Context + LLM can declare needs via structured requirements block.
 ///   System auto-creates the declared artifacts.
 /// - `Aspirational`: All Tier 3 logic + unfulfillable claims classified as aspirational backlog.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BootstrapTier {
     /// Pure Generation — No grounding. LLM hallucinates freely. No manifest.json.
     PureGeneration,
     /// Grounded — Injected system context. LLM must match reality exactly.
     Grounded,
-    /// Scaffolded — Context + LLM can request scaffolding via structured infra block.
+    /// Scaffolded — Context + LLM can request scaffolding via structured infra block (default).
+    #[default]
     Scaffolded,
     /// Aspirational — All Tier 3 + unfulfillable claims classified as backlog.
     Aspirational,
-}
-
-impl Default for BootstrapTier {
-    fn default() -> Self {
-        Self::Scaffolded
-    }
 }
 
 /// Bootstrap Status — tracks the lifecycle state of an agent's infrastructure scaffolding.

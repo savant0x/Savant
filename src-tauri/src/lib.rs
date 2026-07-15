@@ -273,7 +273,7 @@ pub fn load_env_from_exe_dir(exe_path: &Path) -> Result<(), dotenvy::Error> {
             "exe_path has no parent directory (root path?)",
         ))
     })?;
-    dotenvy::from_path(&parent.join(".env")).map(|_| ())
+    dotenvy::from_path(parent.join(".env")).map(|_| ())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

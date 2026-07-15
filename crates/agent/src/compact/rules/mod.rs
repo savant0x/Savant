@@ -235,7 +235,6 @@ static BUILTIN_RULE_JSONS: &[(&str, &str)] = &[
 ];
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

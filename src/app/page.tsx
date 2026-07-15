@@ -3,23 +3,29 @@
 import { Card, Chip } from "@heroui/react";
 import { DashboardShell } from "@/components/dashboard-shell";
 
-// Root route: About / Savant v0.0.6 landing view.
+// Root route: About / Savant v0.0.7 landing view.
 // The 3-panel shell (rail, fold toggle, theme toggle, inspector, center
 // header) is rendered by <DashboardShell>. This file provides the
 // post-release landing content below the header: 1 status banner +
-// 3 about-feature cards orient the visitor to the v0.0.6 deliverables.
+// 3 about-feature cards orient the visitor to the v0.0.7 deliverables.
 
-const RELEASE_TAG = "v0.0.6";
+const RELEASE_TAG = "v0.0.7";
 const RELEASE_DATE = "2026-07-15";
+// FID-035 §Layered Build Order enumerates the open v0.0.8+ work.
+// Layer 0 (FID-031 gateway) SHIPPED in v0.0.7. v0.0.8+: FID-029 chat
+// persistence (Layer 1a) runs in parallel with FID-028 agent memory
+// graph viz (Layer 1b), then FID-030 CLI scaffold (Layer 2), FID-032
+// api-client refactor (Layer 3), FID-033 Tauri repackaging (Layer 4,
+// optional), FID-034 kernel trait adoption (Layer 5, highest risk —
+// run last per FID-035 §Layered Build Order risk ordering, not deferred).
 const NEXT_PHASE =
-  "v0.0.7+ architectural pivot (Tauri → CLI/HTTP strangler-fig pattern)";
+  "v0.0.8+: FID-029 chat persistence (Layer 1a) + FID-028 memory graph viz (Layer 1b, parallel), then FID-030 CLI scaffold (Layer 2), FID-032 api-client refactor (Layer 3), FID-033 Tauri repackaging (Layer 4, optional), FID-034 kernel trait adoption (Layer 5, highest risk) — per FID-035 §Layered Build Order";
 
 export default function Home() {
   return (
     <DashboardShell>
       <div className="mb-6 flex flex-col gap-3">
         <Chip
-          variant="solid"
           color="success"
           className="self-start font-mono text-xs"
         >

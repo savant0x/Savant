@@ -15,6 +15,14 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import type { AppConfig, ProfileSummary } from "./ipc";
+import type { ChatMessage } from "./chat-data";
+import {
+  sortedSessions,
+  loadChatHistoryMock,
+  persistTurnMock,
+  deleteSessionMock,
+  searchHistoryMock,
+} from "./mock-chat";
 import {
   generateSoul,
   generateSoulStream,
@@ -924,6 +932,25 @@ export function setupMockIPC(): void {
       case "get_faq": {
         return getFaqItems();
       }
+    case "list_chat_sessions":
+      return sortedSessions();
+    case "load_chat_history":
+      return loadChatHistoryMock(args.sessionId as string, args.limit as number | 0);    case "persist_chat_turn":
+      // TS2345 narrowing: `args` is typed as Record<string, unknown>
+      // (see cast at top of switch). The renderer-side producer
+      // (`use-chat-history.ts::sendTurn`) constructs full ChatMessage
+      // objects, so this assertion is safe at the mock layer. The
+      // DAEMON path (FID-032 Layer 3) will validate the shape via
+      // serde at the IPC boundary, eliminating the helper-side cast.
+      return persistTurnMock(
+        args.sessionId as string,
+        args.userMessage as ChatMessage,
+        args.assistantMessage as ChatMessage,
+      );
+    case "delete_chat_session":
+      return deleteSessionMock(args.sessionId as string);
+    case "search_chat_history":
+      return searchHistoryMock(args.query as string, args.limit as number | 0);
 
       default:
         throw new Error(`Mock IPC: unknown command "${cmd}"`);

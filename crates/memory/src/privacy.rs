@@ -358,7 +358,7 @@ mod tests {
             "sk",
             "-abc123def456ghi789jkl012mno345",
         );
-        assert!(contains_secrets(&input));
+        assert!(contains_secrets(input));
     }
 
     #[test]
@@ -375,7 +375,7 @@ mod tests {
             "ghp",
             "_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop",
         );
-        let result = scan_and_redact(&input);
+        let result = scan_and_redact(input);
         assert!(result.redaction_count >= 2);
         assert!(result.content.contains("<REDACTED:aws_access_key>"));
         assert!(result.content.contains("<REDACTED:github_pat>"));

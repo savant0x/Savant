@@ -235,29 +235,3 @@ static BUILTIN_RULE_JSONS: &[(&str, &str)] = &[
 ];
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_registry_new() {
-        let registry = RuleRegistry::new(
-            PathBuf::from("/nonexistent/user"),
-            PathBuf::from("/nonexistent/project"),
-        );
-        // Should have at least the builtin rules
-        assert!(!registry.is_empty());
-        assert!(registry.len() >= 10);
-    }
-
-    #[test]
-    fn test_get_by_id() {
-        let registry = RuleRegistry::new(
-            PathBuf::from("/nonexistent/user"),
-            PathBuf::from("/nonexistent/project"),
-        );
-        let rule = registry.get_by_id("git/status");
-        assert!(rule.is_some());
-        assert_eq!(rule.unwrap().rule.id, "git/status");
-    }
-}

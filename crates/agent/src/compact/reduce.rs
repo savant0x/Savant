@@ -328,7 +328,6 @@ impl ReductionPipeline {
 }
 
 #[cfg(test)]
-#[expect(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

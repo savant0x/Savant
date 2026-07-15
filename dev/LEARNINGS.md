@@ -308,6 +308,33 @@ Wire as `pnpm lint:lockfile` + add to `pnpm lint:ci` chain.
 
 **Codified by:** Spencer (selected Path A "Clean reinstall" from the ask_user prompt) + Buffy (executed rm + npm install + PID kill + boot test + LESSON codification). Pre-state snapshot captured in this conversation turn (next 15.5.20 installed, @next/swc 15.5.19 installed, lockfile at 0.0.5, package.json at 0.0.6, node_modules 748M, 7 dirty files); post-state verified (next 15.5.20, @next/swc 15.5.20, lockfile 0.0.6, node_modules 606M, boot in 1380ms with zero warnings).
 
+### LESSON-062: FID-035 Path-Discipline — Choose Path Upfront When Promoting a Gate
+
+**Date:** 2026-07-15
+**Trigger:** FID-029 v0.0.8 Layer 1a §Verification Gate promotion. `cargo clippy --workspace --all-targets -- -D warnings` was elevated from soft-warn to hard-fail, which surfaced an iceberg of pre-existing violations across the entire workspace. The recursion pattern: each clippy-fix-set exposes more pre-existing violations in DIFFERENT crates. This session's cycle: 89 → 2 → 5 + 14 → 1 → 8 → 0 = 8 fix-rounds consuming the entire session. The recursion is systemic — when ANY previously-soft check becomes a hard gate, EVERY pre-existing violation enters scope at once.
+**Lesson:** Before promoting any check to a hard gate (one that blocks Layer-closure), commit EXPLICITLY to ONE of FID-035 §Post-Impl Audit's 4 Paths upfront:
+- **Path A (in-cycle fix).** Budget for ALL pre-existing violations inside the current cycle (inventory verified BEFORE iterating). Iterations: 1–3 (small), 4–7 (medium with FID-tracker), 8+ MUST open a dedicated FID, NEVER silent feature-cycle absorb.
+- **Path B (defer-with-FID).** Open a FID-tracking file documenting the deviation per LESSON-053 honest-assessment. Reduce the gate's strictness (e.g., remove blanket deny) AND add `#[allow(...)]` per-file scope with FID-anchor comments. NEVER just delete the gate's config without FID documentation.
+- **Path C (ignore+accept).** Only via explicit Spencer approval (LESSON-038); always paired with a documented deviation note.
+- **Path D (document deviation).** Keep the gate strict; the FID documents "all pre-existing violations are PRE-EXISTING on the v<X.Y.Z> baseline, NOT introduced by this cycle, tracked at FID-NNN for systematic cleanup."
+**Replacement decision tree at gate-promotion moment:**
+1. Inventory pre-existing violations upfront (e.g., `cargo clippy -D warnings 2>&1 | grep -cE "^error: "` BEFORE writing the new gate line).
+2. If count ≤ 20: Path A inline (budget ~3 cycles max).
+3. If 20 < count ≤ 100: Path B + Path A hybrid — reduce strictness AND fix in-cycle, ANCHORED to a single FID-tracker.
+4. If count > 100: Path B defer-with-FID + per-file `#[allow]` with FID anchor. NEVER iterate silently.
+5. ANY path that takes ≥ 4 cycles MUST open a FID-tracker for the recursion.
+**Anti-pattern:** Iteratively fixing pre-existing violations inside a feature-cycle commit WITHOUT opening a FID-tracker. Violates LESSON-053 honest-assessment (CHANGELOG entry says "feature added" but the diff says "feature + tech-debt cleanup" mixed). AND bloats the diff (this cycle's 36 files / +450/−1037 is the exemplar of the bloat).
+**Detection heuristic:** If `git diff --shortstat` shows > 10 files modified OR > 200 LOC changed in a single Layer-closure cycle, treat the residual fixes as a SEPARATE workstream — split into a TODO commit (small) OR open a FID-tracker (large).
+**Exemplar — this FID-029 v0.0.8 cycle went 8 fix-rounds:**
+1. R1: `[lints.clippy] expect_used = {...}` table → REJECTED (`unknown field 'lint'`).
+2. R2: flat-key `expect-used = {...}` → REJECTED (`unknown field 'expect-used'`).
+3. R3: minimal `disallowed-methods = []` + `match + panic!()` in `crates/vault::default_identity` (1 prod + 88 test cleared); pre-existing inventory exposed 2 in `savant_core`.
+4. R4–R8: `bootstrap.rs` `manual_char_comparison`, `types/mod.rs::BootstrapTier` `derivable_impls`, `memory/privacy.rs` 2× `needless_borrow`, `gateway/handlers/mod.rs` `unnecessary_map_or`, `crates/agent/**` 20× stale `#[expect(clippy::disallowed_methods)]`, `src-tauri/lib.rs:276` `needless_borrows_for_generic_args`, `tests/vault_dotenv_strategy_test.rs` `single_component_path_imports`, `tests/skill_execution_smoke_test.rs` `doc_lazy_continuation`. Each round required its own verifier + code-reviewer parallel spawn per standing rule.
+**Conclusion (path choice this cycle):** **Path B + Path A hybrid.** FID-036 documents the clippy.toml policy refinement (Path B). Then Path A executes inline for the residual 28 pre-existing violations across 7 crates, ANCHORED to FID-036 as the cross-cutting tracker. Honest attribution per LESSON-053: CHANGELOG v0.0.8 entry + FID-036 §Status both say "all 116 pre-existing clippy violations resolved via clippy.toml policy refinement (88 test) + 28 inline code-fixes (1 prod + 27 test/trivial)."
+**Drift-resistance after this cycle:** relies on (a) FID-036 30-line anchor comment in `clippy.toml`, (b) future clippy schema where `[lints.clippy]` table supports `except-cfg`, (c) per-crate `#![warn(clippy::pedantic)]` opt-in for proactive guards. If `cargo clippy -- -D warnings` ever passes the FID-029 cycle but introduces a NEW pre-existing class, restart this loop.
+**Cross-references:** FID-035 §Acceptance Criteria (Layer 1a closure = ALL 8 gates exit 0); FID-035 §Post-Impl Audit (the 4-Path taxonomy); FID-036 (the clippy.toml policy refinement tracker); LESSON-053 (honest assessment of pre-existing handed into feature-cycle); LESSON-038 (no unilateral defer — Path B requires FID documentation, not silent work); LESSON-051 (explicit scope-ratify — Path choice is a scope decision needing explicit ground); ECHO.md §Quality Override Precedence (language standard > project config — the doctrinal basis for the policy-refinement move); `coding-standards/rust.md` (the verbatim `.expect("reason")` rule allowing test code).
+**Codified by:** Buffy (autonomous cycle per Spencer's level-3 autonomy grant, 2026-07-15 session).
+
 <!-- Add new entries above this line -->
 
 ### LESSON-061: Shell Orchestrator Scripts Must Avoid Python Dependency
