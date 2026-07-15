@@ -7,7 +7,48 @@ Work-in-progress against v0.0.8. Open candidates: (a) FID-029 §Step 2-5 (chat p
 
 ## v0.0.7 — 2026-07-15
 
-Work-in-progress against v0.0.7. Per the v0.0.6 release summary §Open Questions: (a) Layer 1a chat persistence; (b) Layer 1b memory graph; (c) Layer 2 CLI scaffold; (d) Layer 3 api-client swap; (e) Layer 4 Tauri repackage to apps/tauri/. Awaiting FID-029/030/032/033 begin ratification per LESSON-051.
+Cumulative release since v0.0.6. Captures the cascade-recovery cycle codification (LESSON-053 + LESSON-054 + LESSON-055 + LESSON-061) + the FID-022 + FID-024 §Step E + FID-026 + FID-031 tooling batch + the 1-pass orchestrator (`scripts/release-prep.sh`) that automates future release cuts. 5 version-bearing files bumped to 0.0.7 in lockstep per LESSON-019; README.md status badge + "What's New in v0.0.7" section + Roadmap v0.0.7 SHIPPED row refreshed automatically.
+
+### Added (FID-022 — LESSON-027/028/029/030/031 git release tooling, 2026-07-14)
+
+- **`pnpm lint:docs`** [`scripts/lint-docs.sh`]: enforces the LESSON-027 substring-match drift invariant (5 anchors across 4 source files for the cascade-ordering phrase; 1 cascade-prose alternation variant in the canonical `crates/vault/src/master_key.rs` only). Wired as `pnpm lint:docs` (standalone) + part of `pnpm lint:ci`.
+- **`pnpm release:check`** [`scripts/release-check.sh`]: LESSON-029 3-gate pre-flight companion. Gate 1 = clean working tree. Gate 2 = no transient temp files. Gate 3 = remote tag presence (advisory). Exit codes match the failing gate.
+- **`pnpm git:commit` + `pnpm git:tag`** [`scripts/commit-with-message.sh`, `scripts/tag-with-message.sh`]: LESSON-030 file-based wrappers for `git commit -F <msg-file>` + `git tag -a <tag> -F <msg-file>`. Avoids multi-`-m` shell-escape brittleness for backticks / em-dashes / multi-byte UTF-8.
+- **`pnpm verify:fix`** [`scripts/verify-fix.sh`]: LESSON-031 dual-check re-grep pattern. Counts `--old` (expect 0) + `--new` (expect >= 1).
+- **[`coding-standards/doc-drift-lint.md`]** (NEW): canonical reference for LESSON-027 + LESSON-028 + LESSON-031.
+
+### Added (FID-024 §Step E — 1-pass release orchestrator, 2026-07-15)
+
+- **`scripts/release-prep.sh`** (NEW): orchestrator chaining archive-fids → bump-version → refresh-readme → clean-bloat → 4 verification gates → commit + push → delegate tag + GH release to `release.py`. Wired as `pnpm release:prep <X.Y.Z>` (with `--apply` for destructive mode). Companion scripts: `scripts/archive-fids.sh` + `scripts/bump-version.sh` + `scripts/refresh-readme.sh` + `scripts/clean-bloat.sh` — each invokable standalone for staged workflows.
+
+### Added (FID-026 — LESSON-038 no-unilateral-defer tooling, 2026-07-14)
+
+- **`pnpm lint:defer`** [`scripts/lint-defer.sh`]: enforces the LESSON-038 adjacency invariant — every `deferred` line in `dev/fids/FID-*.md` must have a permit-context marker within ±3 lines (verbatim Spencer quote, negation phrasing, LESSON cross-ref, historical marker, compound form, release-window reference). 30 permit markers across 6 categories. Wired as `pnpm lint:defer` (standalone) + 3rd link of `pnpm lint:ci`.
+
+### Added (FID-031 — Strangler-Fig Layer 0, 2026-07-14)
+
+- **33 NEW `/v1/*` endpoints (32 REST + 1 SSE)** [`crates/gateway/src/handlers/v1/`]: host-agnostic HTTP+WebSocket layer for the Strangler-Fig Tauri→CLI pivot. 32 REST handlers map to existing Tauri IPC commands (changelog / faq / vault / consciousness / inference / manifest / skills / chat / tune / session) + 1 SSE handler (`/v1/stream`).
+- **`embedded-web` Cargo feature flag**: rust-embed + SPA fallback. `cargo build --features embedded-web` bundles the Next.js `out/` into the binary; OFF keeps the gateway headless + dashboard loads via `localhost:3000`.
+- **10 NEW in-process smoke tests** at [`crates/gateway/tests/v1_routes_smoke_test.rs`].
+- **Per LESSON-027 doc-drift correction**: the on-disk implementation is PARTIAL (3 real impls + 6 stubs returning 501 NotImplemented + 1 SSE plumbing stub); the remaining 23 endpoints land in FID-029 (chat) + FID-032 (api-client swap) per the Layered Build Order.
+
+### Changed
+
+- **[`coding-standards/release-workflow.md`]**: added §Pre-flight Check (LESSON-029), §File-Based Commit/Tag Pattern (LESSON-030), §Checkpoint Release Discipline (build-freely + push-at-release), and §Bounded Behavior: No Unilateral Defer (LESSON-038).
+- **[`coding-standards/doc-drift-lint.md`]**: added §LESSON-038 subsection (FID-026).
+- **`scripts/refresh-readme.sh`** (LESSON-061 + LESSON-029): replaced python3 heredoc with pure awk (POSIX-portable; python3 may not be on Windows Git Bash PATH). Added `--previous <ver>` arg support so the orchestrator can pass the pre-bump version.
+- **`scripts/release-prep.sh`**: MSG_FILE moved from `dev/.tmp-v<X>-release.txt` (inside repo) to `/tmp/.tmp-v<X>-release.txt` (outside repo) so `git add -A` never stages the .tmp msg file. Gate D (release-check.sh) skipped in --apply mode (the orchestrator's own Steps 2-3 mutation makes Gate D unrunnable mid-orchestrator; release.py at the tail has its own clean-tree pre-flight per LESSON-029).
+
+### LESSONs codified
+
+- **LESSON-053** (`dev/LEARNINGS.md`): cascade-recovery 5-step BOOT CHECK pipeline (BOOT → READ → ACTIVATE → MONITOR → SHUTDOWN).
+- **LESSON-054** (`dev/LEARNINGS.md`): stale-session-transcript disposition (Locate + size-signal + untracked-verify + Read 0-EOF + Codify via LESSON if invariant + Document + BOOT CHECK 3 re-run).
+- **LESSON-055** (`dev/LEARNINGS.md`): 3-category doctrine for GitHub secret-scanning (GH13) blocks (test fixture / transcript / hard-coded live credential).
+- **LESSON-061** (`dev/LEARNINGS.md`): POSIX-portable tools — prefer awk/sed over python3 in scripts that must work on Windows Git Bash without python3 on PATH.
+
+### Foundation (Strangler-Fig Tauri → CLI pivot)
+
+The 5 NEW FID-029/030/032/033/034 FIDs (Layer 1a through Layer 5 / kernel) are NOT in this release — they remain WIP under `## [Unreleased]` above, awaiting Spencer's begin-ratification per LESSON-051. FID-031 (the gateway expansion, Layer 0) IS in this release as the foundation. The CLI host (FID-030) + api-client refactor (FID-032) + Tauri repackage to apps/tauri/ (FID-033) + kernel trait adoption (FID-034) land in v0.0.8+.
 
 ### Added (Foundation commit 8512f78, 2026-07-15)
 
