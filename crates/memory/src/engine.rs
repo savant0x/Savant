@@ -1526,6 +1526,40 @@ impl MemoryEnclave {
         self.lsm.get_or_create_session_state(session_id)
     }
 
+    /// FID-029 §Step 1 (2026-07-15): persists session title to the
+    /// `session_titles` sibling collection in CortexaDB. No-op if title
+    /// is None (default state — no collection entry written). Sibling-
+    /// collection design avoids the rkyv 0.7.x backward-compat risk of
+    /// adding a field to the existing SessionState struct.
+    /// Partition-locked (LESSON-028 fix-forward 2026-07-15) to prevent
+    /// races with concurrent `save_session_state` calls on the same
+    /// session_id (CortexaDB does not dedupe on collection writes).
+    pub async fn save_session_title(
+        &self,
+        session_id: &str,
+        title: Option<&str>,
+    ) -> Result<(), MemoryError> {
+        let _guard = self.lock_session(session_id).await;
+        self.lsm.save_session_title(session_id, title).await
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): loads session title from the
+    /// `session_titles` sibling collection. Returns None if no title
+    /// has been persisted (default state for pre-FID-029 sessions + new sessions).
+    pub fn load_session_title(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        self.lsm.load_session_title(session_id)
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): iterates all session titles in the
+    /// `session_titles` sibling collection for O(1) joins with `iter_session_states`.
+    /// Returns HashMap<session_id, title> keyed by session_id.
+    pub fn iter_session_titles(&self) -> Result<std::collections::HashMap<String, String>, MemoryError> {
+        self.lsm.iter_session_titles()
+    }
+
     /// Saves a turn state (write-locked).
     pub async fn save_turn_state(
         &self,
@@ -2160,6 +2194,34 @@ impl MemoryEngine {
         session_id: &str,
     ) -> Result<crate::models::SessionState, MemoryError> {
         self.enclave.get_or_create_session_state(session_id).await
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): persists session title to the
+    /// `session_titles` sibling collection in CortexaDB. No-op if title
+    /// is None (default state — no collection entry written).
+    pub async fn save_session_title(
+        &self,
+        session_id: &str,
+        title: Option<&str>,
+    ) -> Result<(), MemoryError> {
+        self.enclave.save_session_title(session_id, title).await
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): loads session title from the
+    /// `session_titles` sibling collection. Returns None if no title has
+    /// been persisted (default state for pre-FID-029 + new sessions).
+    pub fn load_session_title(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        self.enclave.load_session_title(session_id)
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): iterates all session titles in the
+    /// `session_titles` sibling collection for O(1) joins with
+    /// `iter_session_states`. Returns HashMap<session_id, title>.
+    pub fn iter_session_titles(&self) -> Result<std::collections::HashMap<String, String>, MemoryError> {
+        self.enclave.iter_session_titles()
     }
 
     pub async fn save_turn_state(

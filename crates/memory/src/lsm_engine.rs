@@ -1308,6 +1308,123 @@ impl LsmStorageEngine {
         Ok(states)
     }
 
+    /// FID-029 §Step 1 (2026-07-15): persists the auto-generated session title
+    /// to the `session_titles` sibling collection in CortexaDB. The rkyv
+    /// SessionState struct does NOT store `title` (sibling-collection design
+    /// per Spencer's 2026-07-15 directive: "NEVER use in memory for anything
+    /// persistent — we use the db"). If `title` is None, the call is a no-op
+    /// (None is the default state — no collection entry written).
+    pub async fn save_session_title(
+        &self,
+        session_id: &str,
+        title: Option<&str>,
+    ) -> Result<(), MemoryError> {
+        let Some(t) = title else {
+            return Ok(());
+        };
+        let key = format!("title:{}", session_id);
+        let bytes = t.as_bytes().to_vec();
+
+        self.db
+            .add_with_content(
+                "session_titles",
+                bytes,
+                self.zero_embedding(),
+                make_key_meta(&key),
+            )
+            .map_err(|e| MemoryError::TransactionFailed(e.to_string()))?;
+
+        debug!("Saved session title for {}", session_id);
+        Ok(())
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): loads the session title from the
+    /// `session_titles` sibling collection. Returns None if no title has
+    /// been persisted (default state for pre-FID-029 sessions + new sessions).
+    /// Sync (matches `get_session_state`'s sync signature).
+    pub fn load_session_title(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<String>, MemoryError> {
+        let key = format!("title:{}", session_id);
+        let filter = {
+            let mut m = HashMap::new();
+            m.insert("key".to_string(), key);
+            m
+        };
+
+        if let Ok(hits) = self.db.search_in_collection(
+            "session_titles",
+            self.zero_embedding(),
+            1,
+            Some(filter),
+        ) {
+            if let Some(hit) = hits.first() {
+                if let Ok(memory) = self.db.get_memory(hit.id) {
+                    if !memory.content.is_empty() {
+                        if let Ok(title) = String::from_utf8(memory.content.clone()) {
+                            return Ok(Some(title));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// FID-029 §Step 1 (2026-07-15): iterates all session titles in the
+    /// `session_titles` sibling collection, returning a map for O(1) joins
+    /// with `iter_session_states`. Bounded by 10_000 sessions (matches
+    /// the iter_session_states cap). Sync (matches `iter_session_states`).
+    pub fn iter_session_titles(&self) -> Result<HashMap<String, String>, MemoryError> {
+        let hits = self
+            .db
+            .search_in_collection("session_titles", self.zero_embedding(), 10_000, None)
+            .map_err(|e| MemoryError::TransactionFailed(e.to_string()))?;
+
+        let mut titles = HashMap::new();
+        let mut skipped_metadata = 0;
+        let mut skipped_utf8 = 0;
+        for hit in hits {
+            if let Ok(memory) = self.db.get_memory(hit.id) {
+                if memory.content.is_empty() {
+                    continue;
+                }
+                // Extract session_id from the metadata key (format: "title:{session_id}")
+                let session_id = memory
+                    .metadata
+                    .get("key")
+                    .and_then(|k| k.strip_prefix("title:"))
+                    .map(|s| s.to_string());
+                let Some(sid) = session_id else {
+                    skipped_metadata += 1;
+                    continue;
+                };
+                match String::from_utf8(memory.content.clone()) {
+                    Ok(title) => {
+                        titles.insert(sid, title);
+                    }
+                    Err(_) => {
+                        skipped_utf8 += 1;
+                    }
+                }
+            }
+        }
+        if skipped_metadata > 0 {
+            tracing::warn!(
+                count = skipped_metadata,
+                "iter_session_titles: skipped entries with malformed metadata key (expected 'title:{{session_id}}')"
+            );
+        }
+        if skipped_utf8 > 0 {
+            tracing::warn!(
+                count = skipped_utf8,
+                "iter_session_titles: skipped entries with invalid UTF-8 in title content"
+            );
+        }
+        Ok(titles)
+    }
+
     /// S1: Deletes a session state from the "sessions" collection.
     pub fn delete_session_state(&self, session_id: &str) -> Result<(), MemoryError> {
         let key = crate::models::session_state_key(session_id);

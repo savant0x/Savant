@@ -70,17 +70,20 @@ impl MemoryBackend for MockMemory {
         &self,
         _session_id: &str,
     ) -> Result<savant_core::types::SessionState, SavantError> {
-        Ok(savant_core::types::SessionState {
-            session_id: "mock".to_string(),
-            created_at: 0,
-            last_active: 0,
-            turn_count: 0,
-            active_turn_id: None,
-            auto_approved_tools: vec![],
-            denied_tools: vec![],
-            parent_session_id: None,
-            fork_point_turn_id: None,
-        })
+Ok(savant_core::types::SessionState {
+    session_id: "mock".to_string(),
+    created_at: 0,
+    last_active: 0,
+    turn_count: 0,
+    active_turn_id: None,
+    auto_approved_tools: vec![],
+    denied_tools: vec![],
+    parent_session_id: None,
+    fork_point_turn_id: None,
+    // FID-029 §Step 1: mock initializer; title is populated by sibling
+    // collection at hydrate time in async_backend.rs.
+    title: None,
+})
     }
     async fn get_session(
         &self,

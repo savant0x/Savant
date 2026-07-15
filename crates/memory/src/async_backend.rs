@@ -568,6 +568,22 @@ impl MemoryBackend for AsyncMemoryBackend {
             .await
             .map_err(|e| SavantError::Unknown(e.to_string()))?;
 
+        // FID-029 §Step 1: fetch title from the `session_titles` sibling collection.
+        // Graceful degradation — title is metadata, not core state; failure
+        // defaults to None rather than failing the entire session read
+        // (LESSON-028 fix-forward 2026-07-15).
+        let title = self
+            .engine
+            .load_session_title(&sid)
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    session = %sid,
+                    error = %e,
+                    "load_session_title failed; defaulting title to None"
+                );
+                None
+            });
+
         Ok(savant_core::types::SessionState {
             session_id: state.session_id,
             created_at: state.created_at.into(),
@@ -578,6 +594,7 @@ impl MemoryBackend for AsyncMemoryBackend {
             denied_tools: state.denied_tools,
             parent_session_id: state.parent_session_id,
             fork_point_turn_id: state.fork_point_turn_id,
+            title,
         })
     }
 
@@ -593,17 +610,35 @@ impl MemoryBackend for AsyncMemoryBackend {
             .get_session_state(&sid)
             .map_err(|e| SavantError::Unknown(e.to_string()))?
         {
-            Some(state) => Ok(Some(savant_core::types::SessionState {
-                session_id: state.session_id,
-                created_at: state.created_at.into(),
-                last_active: state.last_active.into(),
-                turn_count: state.turn_count.into(),
-                active_turn_id: state.active_turn_id,
-                auto_approved_tools: state.auto_approved_tools,
-                denied_tools: state.denied_tools,
-                parent_session_id: state.parent_session_id,
-                fork_point_turn_id: state.fork_point_turn_id,
-            })),
+            Some(state) => {
+                // FID-029 §Step 1: fetch title from the `session_titles` sibling collection.
+                // Graceful degradation — title is metadata, not core state; failure
+                // defaults to None rather than failing the entire session read
+                // (LESSON-028 fix-forward 2026-07-15).
+                let title = self
+                    .engine
+                    .load_session_title(&sid)
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            session = %sid,
+                            error = %e,
+                            "load_session_title failed; defaulting title to None"
+                        );
+                        None
+                    });
+                Ok(Some(savant_core::types::SessionState {
+                    session_id: state.session_id,
+                    created_at: state.created_at.into(),
+                    last_active: state.last_active.into(),
+                    turn_count: state.turn_count.into(),
+                    active_turn_id: state.active_turn_id,
+                    auto_approved_tools: state.auto_approved_tools,
+                    denied_tools: state.denied_tools,
+                    parent_session_id: state.parent_session_id,
+                    fork_point_turn_id: state.fork_point_turn_id,
+                    title,
+                }))
+            }
             None => Ok(None),
         }
     }
@@ -627,7 +662,24 @@ impl MemoryBackend for AsyncMemoryBackend {
         self.engine
             .save_session_state(&rkyv_state)
             .await
-            .map_err(|e| SavantError::Unknown(e.to_string()))
+            .map_err(|e| SavantError::Unknown(e.to_string()))?;
+
+        // FID-029 §Step 1: persist title to the `session_titles` sibling collection.
+        // Graceful degradation — title-save failure does NOT block the session
+        // save (LESSON-028 fix-forward 2026-07-15).
+        if let Err(e) = self
+            .engine
+            .save_session_title(&state.session_id, state.title.as_deref())
+            .await
+        {
+            tracing::warn!(
+                session = %state.session_id,
+                error = %e,
+                "save_session_title failed; session saved without title"
+            );
+        }
+
+        Ok(())
     }
 
     async fn save_turn(&self, turn: &savant_core::types::TurnState) -> Result<(), SavantError> {

@@ -236,18 +236,20 @@ impl<M: MemoryBackend> AgentLoop<M> {
                     let mut session_state = match self.memory.get_or_create_session(&sid).await {
                         Ok(s) => s,
                         Err(e) => {
-                            warn!("[{}] Failed to load session state: {}. Creating ephemeral.", self.agent_id, e);
-                            savant_core::types::SessionState {
-                                session_id: sid.clone(),
-                                created_at: chrono::Utc::now().timestamp_millis(),
-                                last_active: chrono::Utc::now().timestamp_millis(),
-                                turn_count: 0,
-                                active_turn_id: None,
-                                auto_approved_tools: vec![],
-                                denied_tools: vec![],
-                                parent_session_id: None,
-                                fork_point_turn_id: None,
-                            }
+                            warn!("[{}] Failed to load session state: {}. Creating ephemeral.", self.agent_id, e);savant_core::types::SessionState {
+    session_id: sid.clone(),
+    created_at: chrono::Utc::now().timestamp_millis(),
+    last_active: chrono::Utc::now().timestamp_millis(),
+    turn_count: 0,
+    active_turn_id: None,
+    auto_approved_tools: vec![],
+    denied_tools: vec![],
+    parent_session_id: None,
+    fork_point_turn_id: None,
+    // FID-029 §Step 1: sibling-collection design — title is populated
+    // separately by load_session_title() at hydrate time.
+    title: None,
+}
                         }
                     };
 

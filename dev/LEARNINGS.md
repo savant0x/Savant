@@ -234,4 +234,78 @@ Per LESSON-008 (Cross-Agent Claim Rule / attribution ≠ source), the **agent cl
 **Anti-pattern (the 75-char incident):** v0.0.6 close-out commit `e464a08` is 75 chars (3 over the 72-char canonical). LESSON-030's preflight rejected the multi-`-m` shell pattern; the agent's fallback was the file-based pattern. The trigger for LESSON-058.
 **Cross-references:** LESSON-030 (the file-based pattern); `scripts/commit-with-message.sh`; Spencer's session directive 2026-07-15; `coding-standards/release-workflow.md` Relaxed Subject-Length Discipline section.
 
+### LESSON-059: npm cli #4828 — @next/swc native binding drift fix (clean reinstall with LESSON-038 approval)
+
+**Date:** 2026-07-15
+**Trigger:** Spencer's dev server failed with `Cannot find native binding` (npm cli issue [#4828](https://github.com/npm/cli/issues/4828)). `next` was at `15.5.20` while `@next/swc-win32-x64-msvc` was still at `15.5.19`. Every page returned 500 with `GET / 500 in 4061ms`. Root cause: `package.json` was bumped to `0.0.6` (per LESSON-019 release-only-versioning), but `package-lock.json` was regenerated against `0.0.5` last release — `@next/swc-*` stayed pinned at the older patch version while `next` got the newer one. The lockfile drift surfaced at the dev-server boot, not at the install step, because both 15.5.19 and 15.5.20 install cleanly in isolation.
+
+**Lesson:** When `next` (or any package with native bindings — `@next/swc`, `esbuild`, `better-sqlite3`, `node-sass`) is upgraded by a caret-range semver, the native binding packages often come from the SAME semver-resolution pass. If `package-lock.json` is regenerated against a STALE `package.json` (or vice versa), the resolution can drift and the native binding will not match. The npm cli workaround for this drift is the destructive "clean reinstall" — but this MUST go through LESSON-038 explicit approval first. Same doctrine applies to ANY time the dev server boots with `Cannot find native binding` or `Mismatching @next/swc version` warnings.
+
+**Permitted uses (no extension required):**
+- Running the 5-step doctrine on any `@next/swc` / `esbuild` / `better-sqlite3` / `node-sass` drift symptom (the doctrine generalizes beyond `next`).
+- `rm -rf node_modules` ONLY with explicit Spencer approval (LESSON-038) — never as a unilateral reflex to ANY dev-server error.
+- Documenting the pre-state snapshot in the conversation turn (the "S1.1 installed next version (pre-rm)" pattern) before any destructive op.
+- Booting on port 3000 after explicit `taskkill //F //PID <pid>` of a stale process (the EADDRINUSE blocker pattern).
+
+**Not permitted:**
+- Treating `npm run dev` failure as auto-justification for `rm -rf node_modules` (LESSON-038 forbids unilateral destructive ops).
+- Skipping the pre-state snapshot (LESSON-031 re-grep / LESSON-027 doc-drift invariant — you must have evidence the op was necessary).
+- `rm -rf node_modules` to fix a non-drift bug (e.g., a TS compile error, a missing import) — diagnose first.
+- Pinning `next` to exact version (no `^`) WITHOUT ratifying the trade-off (blocks all patch upgrades; the lint script is the preferred alternative).
+
+**Pattern (the canonical doctrine):**
+
+1. **Confirm the mismatch via disk evidence** (not the error message alone):
+   ```bash
+   cat node_modules/next/package.json | grep version
+   cat node_modules/@next/swc-*/package.json  # all variants — win32-x64-msvc, darwin-arm64, linux-x64-gnu, etc.
+   grep -E "\"@next/swc" package-lock.json | head -n 15
+   ```
+   All `@next/swc-*` variants MUST match `next` patch-version exactly. On this machine, pre-fix: next 15.5.20 + swc 15.5.19 = mismatch.
+
+2. **Check port 3000 (or whatever dev port) is free** before the boot test:
+   ```bash
+   netstat -ano | grep ":3000" || echo "PORT CLEAN"
+   # If stale PID found: taskkill //F //PID <pid>
+   ```
+   A stale dev server from a prior crashed attempt will produce `EADDRINUSE` and mask the real fix verification. On this machine, PID 37412 was holding port 3000 from a prior failed attempt; `taskkill //F //PID 37412` cleared it.
+
+3. **Get explicit approval for the destructive op** (LESSON-038 — never `rm -rf node_modules` unilaterally). Present the 3 candidate fix paths to Spencer: (A) clean reinstall, (B) `npm install --force`, (C) pin `next` to exact version. Spencer selects A → proceed.
+
+4. **Execute the clean reinstall:**
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+   This regenerates the lockfile fresh against the CURRENT `package.json` version. Result on this machine: `next` 15.5.20 + `@next/swc-*` 15.5.20 + lockfile package version 0.0.6 (drift resolved).
+
+5. **Verify the fix:**
+   ```bash
+   cat node_modules/next/package.json | grep version
+   cat node_modules/@next/swc-*/package.json  # MUST match next exactly
+   npm run dev 2>&1 | head -n 30   # expect "✓ Ready in <Xms>" with no SWC warning
+   ```
+   On this machine: `✓ Ready in 1380ms`, zero `Mismatching @next/swc` warnings, zero `Cannot find native binding` errors.
+
+**Prevention (future FID-XXX candidate):** Write `scripts/lint-lockfile-version.sh` that asserts `package-lock.json` root package version equals `package.json` version. Wire as `pnpm lint:lockfile` + add to `pnpm lint:ci` chain. Would catch this drift class at commit time vs. at first dev-server-boot. Alternative: pin `next` to exact version (no `^`) — defeats semver-drift entirely but blocks intentional patch upgrades. Both are defensible; prefer the lint script (catches all such drifts, not just `next`).
+
+**Enforcement + tooling:**
+- The 5-step doctrine above (confirm mismatch → check port → get LESSON-038 approval → rm -rf → npm install → verify) is now the canonical pattern for ANY `@next/swc` / `esbuild` / native-binding drift.
+- Spawn the lint script as FID-XXX after FID-029 closes (not blocking — the clean reinstall path is durable for now).
+- LESSON-027 (doc-drift substring invariant) is preserved: the clean reinstall did not add or remove any anchors.
+
+**Anti-pattern (the Mismatching @next/swc + lockfile drift):** v0.0.6's `package.json` had `next: ^15.0.0` which semver-permitted the upgrade to 15.5.20, but `package-lock.json` was last regenerated at v0.0.5 against `next: 15.5.19` (the lockfile's `package` version field drifted from 0.0.6 → 0.0.5). The agent's first instinct on `Cannot find native binding` was to `npm install` again — which DID NOT fix the drift (npm honors the existing lockfile's pinned version). The destructive `rm -rf node_modules package-lock.json` was the only path forward, and it required LESSON-038 approval. This is the canonical "package.json semver drift vs package-lock.json pin drift" mismatch class — the symptom appears at dev-server boot, not at the install step, which is what makes it hard to catch without the doctrine.
+
+**Exemplar script (FUTURE FID-XXX):** `scripts/lint-lockfile-version.sh` body sketch:
+```bash
+PKG_VER=$(grep '"version"' package.json | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+LOCK_VER=$(grep '"version"' package-lock.json | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+[ "$PKG_VER" = "$LOCK_VER" ] && exit 0 || { echo "lockfile drift: pkg=$PKG_VER lock=$LOCK_VER"; exit 1; }
+```
+Wire as `pnpm lint:lockfile` + add to `pnpm lint:ci` chain.
+
+**Cross-references:** LESSON-038 (destructive-op approval discipline); LESSON-027 (doc-drift invariant preserved through this fix); LESSON-019 (release-only-versioning — the package.json bump that triggered the drift); FID-029 (cascade-recovery context this fix happened in); the npm cli issue tracker at <https://github.com/npm/cli/issues/4828>.
+
+**Codified by:** Spencer (selected Path A "Clean reinstall" from the ask_user prompt) + Buffy (executed rm + npm install + PID kill + boot test + LESSON codification). Pre-state snapshot captured in this conversation turn (next 15.5.20 installed, @next/swc 15.5.19 installed, lockfile at 0.0.5, package.json at 0.0.6, node_modules 748M, 7 dirty files); post-state verified (next 15.5.20, @next/swc 15.5.20, lockfile 0.0.6, node_modules 606M, boot in 1380ms with zero warnings).
+
 <!-- Add new entries above this line -->

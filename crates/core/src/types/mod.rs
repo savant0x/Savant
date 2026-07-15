@@ -31,6 +31,13 @@ pub struct SessionState {
     pub parent_session_id: Option<String>,
     #[serde(default)]
     pub fork_point_turn_id: Option<String>,
+    /// FID-029 §Step 1 (2026-07-15): auto-titled from first user message.
+    /// Backed by the `session_titles` sibling collection in CortexaDB
+    /// (NOT a rkyv-archived field — sibling-collection design avoids the
+    /// rkyv 0.7.x backward-compat risk for pre-FID-029 sessions, per
+    /// Spencer's directive: "NEVER use in memory for anything persistent").
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 impl SessionState {

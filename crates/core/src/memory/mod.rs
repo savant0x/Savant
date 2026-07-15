@@ -81,6 +81,9 @@ impl MemoryBackend for FjallMemoryBackend {
             active_turn_id: state.active_turn_id,
             auto_approved_tools: state.auto_approved_tools,
             denied_tools: state.denied_tools,
+            // FID-029 §Step 1: rkyv source has no title; populated by sibling
+            // collection at the async_backend.rs MemoryBackend trait impl layer.
+            title: None,
         })
     }
 
@@ -101,6 +104,9 @@ impl MemoryBackend for FjallMemoryBackend {
                 active_turn_id: state.active_turn_id,
                 auto_approved_tools: state.auto_approved_tools,
                 denied_tools: state.denied_tools,
+                // FID-029 §Step 1: rkyv source has no title; populated by sibling
+                // collection at the async_backend.rs MemoryBackend trait impl layer.
+                title: None,
             })),
             None => Ok(None),
         }
